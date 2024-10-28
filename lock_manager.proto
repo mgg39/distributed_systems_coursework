@@ -1,0 +1,33 @@
+// lock_manager.proto
+syntax = "proto3";
+
+service LockManager {
+    // Method to acquire a lock
+    rpc LockAcquire (LockRequest) returns (LockResponse);
+    
+    // Method to release a lock
+    rpc LockRelease (LockRequest) returns (LockResponse);
+    
+    // Method to append data to a file
+    rpc AppendFile (FileAppendRequest) returns (FileAppendResponse);
+}
+
+// Messages for lock requests and responses
+message LockRequest {
+    string client_id = 1;
+}
+
+message LockResponse {
+    string message = 1;
+}
+
+// Messages for file appending requests and responses
+message FileAppendRequest {
+    string client_id = 1;
+    string file_name = 2;
+    string data = 3;
+}
+
+message FileAppendResponse {
+    string message = 1;
+}
