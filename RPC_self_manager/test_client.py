@@ -10,13 +10,15 @@ class TestClient:
 
     def send_message(self, message):
         try:
-            # Send message 
+            # Send message to the server
             self.sock.sendto(message.encode(), self.server_address)
-            # Receive response 
+            # Receive response from the server
             response, _ = self.sock.recvfrom(1024)
-            print(f"{self.client_id}: {response.decode()}")
+            return response.decode()
         except socket.timeout:
-            print(f"{self.client_id}: No response from server")
+            print(f"{self.client_id}: No response from server (timeout)")
+            return ""  # Return an empty string if no response
+
 
     def acquire_lock(self):
         self.send_message("acquire_lock")
@@ -33,19 +35,32 @@ class TestClient:
 # Test with multiple clients
 def client_actions(client_id):
     client = TestClient(client_id)
-    
-    # Step 1: Attempt to acquire lock
-    client.acquire_lock()
-    time.sleep(1)
-    
-    # Step 2: Append data to file (while holding lock)
-    client.append_to_file("file_0", f"Data from {client_id}")
-    time.sleep(1)
+    lock_acquired = False
 
-    # Step 3: Release the lock
-    client.release_lock()
+    # Attempt to acquire lock, retry if necessary
+    for _ in range(5):  # Try up to 5 times
+        response = client.send_message("acquire_lock")
+        if "Lock acquired" in response:
+            lock_acquired = True
+            print(f"{client_id}: Lock acquired")
+            break
+        elif "Lock is currently held" in response:
+            print(f"{client_id}: {response}")  # "Lock is currently held"
+            time.sleep(1)  # Wait briefly before retrying
+        else:
+            print(f"{client_id}: Retrying due to no response or unknown message")
+            time.sleep(1)  # Retry after a short delay
+
+    if lock_acquired:
+        # Append data to file if the lock was acquired
+        client.append_to_file("file_0", f"Data from {client_id}")
+        time.sleep(1)
+
+        # Release the lock
+        client.release_lock()
     
     client.close()
+
 
 if __name__ == "__main__":
     # Simulate multiple clients in separate threads
