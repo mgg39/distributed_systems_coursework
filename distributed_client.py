@@ -68,15 +68,17 @@ class DistributedClient:
         print(f"{self.client_id}: Connection closed.")
 
 # Example usage
-"""
+
 if __name__ == "__main__":
     client = DistributedClient("client_1")
     
-    client.acquire_lock()
-    
-    client.append_file("file_0", "This is a test log entry.")
-    
-    client.release_lock()
-    
-    client.close()
-"""
+    try:
+        # Try to acquire lock with retries
+        if client.acquire_lock():
+            # Append data to file if lock acquired
+            client.append_file("file_0", "This is a test log entry.")
+    finally:
+        # Ensure lock is released after operations are complete
+        client.release_lock()
+        # Close the connection
+        client.close()

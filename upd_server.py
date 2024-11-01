@@ -49,15 +49,17 @@ class LockManagerServer:
         with self.lock:
             if self.current_lock_holder is None:
                 self.current_lock_holder = client_id
-                return "Lock acquired"
+                print(f"Lock granted to {client_id}")
+                return "grant lock"
             else:
+                print(f"Lock is currently held by {self.current_lock_holder}")
                 return "Lock is currently held"
 
     def release_lock(self, client_id):
         with self.lock:
             if self.current_lock_holder == client_id:
                 self.current_lock_holder = None
-                return "Lock released"
+                return "unlock success"
             else:
                 return "You do not hold the lock"
 
