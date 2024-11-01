@@ -1,10 +1,10 @@
 import socket
 
 class RPCConnection:
-    def __init__(self, server_address, server_port):
+    def __init__(self, server_address, server_port, timeout=5):  # timeout 5 sec
         self.server_address = (server_address, server_port)
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.settimeout(2)
+        self.sock.settimeout(timeout)
 
     def rpc_send(self, message):
         try:

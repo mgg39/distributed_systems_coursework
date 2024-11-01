@@ -1,5 +1,8 @@
+import socket
 import time
+import threading
 from rpc_connection import RPCConnection
+import urllib.parse
 
 class DistributedClient:
     def __init__(self, client_id, server_address='localhost', server_port=8080):
@@ -7,6 +10,7 @@ class DistributedClient:
         self.connection = RPCConnection(server_address, server_port)
         self.lock_acquired = False
         self.request_id = 0  # Initialize request counter
+        self.lease_duration = None
 
     def next_request_id(self):
         # Generates new request ID per request
@@ -14,11 +18,18 @@ class DistributedClient:
         return str(self.request_id)
 
     def send_message(self, message_type, additional_info=""):
-        # Send message with request ID & handle response
-        request_id = self.next_request_id()
-        message = f"{message_type}:{self.client_id}:{request_id}:{additional_info}"
-        response = self.connection.rpc_send(message)
-        return response
+            # URL encode additional 
+            additional_info_encoded = urllib.parse.quote(additional_info)
+
+            # Construct the message
+            request_id = self.next_request_id()
+            if additional_info_encoded:
+                message = f"{message_type}:{self.client_id}:{request_id}:{additional_info_encoded}"
+            else:
+                message = f"{message_type}:{self.client_id}:{request_id}"
+            
+            response = self.connection.rpc_send(message)
+            return response
 
     def acquire_lock(self, max_retries=5, base_interval=1):
         # Attempt to acquire lock (increasing wait time between attempts)
@@ -26,10 +37,16 @@ class DistributedClient:
         for attempt in range(max_retries):
             response = self.send_message("acquire_lock")
             
-            if response == "grant lock":
+            # Check if lock was granted and extract lease duration
+            if response.startswith("grant lock"):
                 self.lock_acquired = True
-                print(f"{self.client_id}: Lock acquired successfully.")
-                return True  # Lock acquired
+                _, lease_duration_str = response.split(":")
+                self.lease_duration = int(lease_duration_str)
+                print(f"{self.client_id}: Lock acquired with lease duration of {self.lease_duration} seconds.")
+                
+                # Start heartbeat thread to renew the lease
+                threading.Thread(target=self.send_heartbeat, daemon=True).start()
+                return True
             
             elif response == "Lock is currently held":
                 print(f"{self.client_id}: Lock is held, retrying...")
@@ -37,12 +54,18 @@ class DistributedClient:
             else:
                 print(f"{self.client_id}: No response or unexpected response, retrying...")
             
-            # Exponential backoff
             time.sleep(retry_interval)
-            retry_interval *= 2  # Double the wait time for the next retry
+            retry_interval *= 2  # Exponential backoff
 
         print(f"{self.client_id}: Failed to acquire lock after {max_retries} attempts.")
-        return False  # Lock not acquired
+        return False
+
+    def send_heartbeat(self):
+            #Send periodic heartbeat to keep lock alive based on lease duration
+            if self.lease_duration:
+                while self.lock_acquired:
+                    self.send_message("heartbeat")
+                    time.sleep(self.lease_duration / 2)  # Send heartbeat halfway through the lease
 
     def release_lock(self):
         # Releases lock if held
@@ -57,9 +80,10 @@ class DistributedClient:
             print(f"{self.client_id}: Cannot release lock - lock not held by this client.")
 
     def append_file(self, file_name, data):
-        #Appends data to file if lock held
+        # Appends data to file if lock held
         if self.lock_acquired:
-            response = self.send_message(f"append_file:{file_name}:{data}")
+            # Send message as `append_file:file_name:data` with request ID
+            response = self.send_message("append_file", f"{file_name}:{data}")
             if response == "append success":
                 print(f"{self.client_id}: Data appended to {file_name}")
             else:
@@ -73,7 +97,7 @@ class DistributedClient:
         print(f"{self.client_id}: Connection closed.")
 
 # Example usage
-"""
+
 if __name__ == "__main__":
     client = DistributedClient("client_1")
     
@@ -81,10 +105,9 @@ if __name__ == "__main__":
         # Try to acquire lock with retries
         if client.acquire_lock():
             # Append data to file if lock acquired
-            client.append_file("file_0", "This is a test log entry.")
+            client.append_file("file_1", "This is a test log entry.")
     finally:
         # Ensure lock is released after operations are complete
         client.release_lock()
         # Close the connection
         client.close()
-"""
