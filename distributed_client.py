@@ -1,5 +1,5 @@
-from rpc_connection import RPCConnection
 import time
+from rpc_connection import RPCConnection
 
 class DistributedClient:
     def __init__(self, client_id, server_address='localhost', server_port=8080):
@@ -15,28 +15,35 @@ class DistributedClient:
             print(f"{self.client_id}: No response from server (timeout)")
         return response
 
-    def acquire_lock(self, max_retries=5, retry_interval=1):
-        #Attempts to acquire lock, with retries
+    def acquire_lock(self, max_retries=5, base_interval=1):
+        # Attempt to acquire lock (increasing wait time between attempts)
+        retry_interval = base_interval
         for attempt in range(max_retries):
             response = self.send_message("acquire_lock")
-            if response == "Lock acquired":
+            
+            if response == "grant lock":
                 self.lock_acquired = True
                 print(f"{self.client_id}: Lock acquired successfully.")
-                return
+                return True  # Lock acquired
+            
             elif response == "Lock is currently held":
                 print(f"{self.client_id}: Lock is held, retrying...")
-                time.sleep(retry_interval)  # Wait and retry
+            
             else:
-                print(f"{self.client_id}: Unexpected response or timeout.")
-                time.sleep(retry_interval)
+                print(f"{self.client_id}: No response or unexpected response, retrying...")
+            
+            # Exponential backoff
+            time.sleep(retry_interval)
+            retry_interval *= 2  # Double the wait time for the next retry
 
         print(f"{self.client_id}: Failed to acquire lock after {max_retries} attempts.")
+        return False  # Lock not acquired
 
     def release_lock(self):
-        #Releases lock if held
+        # Releases lock if held
         if self.lock_acquired:
             response = self.send_message("release_lock")
-            if response == "Lock released":
+            if response == "unlock success":
                 self.lock_acquired = False
                 print(f"{self.client_id}: Lock released successfully.")
             else:
@@ -48,12 +55,15 @@ class DistributedClient:
         #Appends data to file if lock held
         if self.lock_acquired:
             response = self.send_message(f"append_file:{file_name}:{data}")
-            print(f"{self.client_id}: AppendFile Response: {response}")
+            if response == "append success":
+                print(f"{self.client_id}: Data appended to {file_name}")
+            else:
+                print(f"{self.client_id}: Append failed or no response - {response}")
         else:
             print(f"{self.client_id}: Cannot append to file - lock not held.")
 
     def close(self):
-        #Closes connection to server
+        #Closes connection 
         self.connection.close()
         print(f"{self.client_id}: Connection closed.")
 
