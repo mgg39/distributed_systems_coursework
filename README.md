@@ -7,10 +7,9 @@ This coursework implements a UDP-based lock server for a distributed system as p
 - [Overview](#overview)
 - [File Structure](#file-structure)
 - [Implementation Details](#implementation-details)
-  - [Network Failure and Client/Server Crash Handling](#network-failure-and-clientserver-crash-handling)
   - [RPC Initialization and Lock Management](#rpc-initialization-and-lock-management)
   - [Socket Programming and Multithreading](#socket-programming-and-multithreading)
-  - [Parsing and __pycache__](#parsing-and-pycache)
+  - [Crash Handling](#crash-handling)
 - [Usage](#usage)
 - [Dependencies](#dependencies)
 - [Environment](#environment)
@@ -22,20 +21,22 @@ The system consists of a lock manager server and multiple distributed clients th
 
 ## File Structure
 
-The project contains the following main files:
+The project contains the following folders:
 
-1. **`upd_server.py`**: Implements the UDP lock server.
-2. **`rpc_connection.py`**: Handles RPC connections between clients and the server.
-3. **`distributed_client.py`**: Represents the client that interacts with the server to manage locks and append data to files.
-4. **`test_client.py`**: Contains a testing framework to simulate multiple clients attempting to acquire locks and write to files.
+1. Main:
+This folders contains the main versions of the code used to build this task:
+    1.1. **`upd_server.py`**: Implements the UDP lock server.
+    1.2. **`rpc_connection.py`**: Handles RPC connections between clients and the server.
+    1.3. **`distributed_client.py`**: Represents the client that interacts with the server to manage locks and append data to files.
+    1.4. **`test_client.py`**: Contains a testing framework to simulate multiple clients attempting to acquire locks and write to files.
+
+2. Test_crashes: TODO: fill this
+This folders contains the test performed on the network to ensure fault tolerance:
+    2.1
+    2.2
+    2.3
 
 ## Implementation Details
-
-### Network Failure and Client/Server Crash Handling
-
-- **Lock Expiration**: The server uses a lease mechanism for locks, where a lock is automatically released if not renewed within a specified duration (`LOCK_LEASE_DURATION`). This prevents locks from being held indefinitely due to client crashes.
-- **Heartbeat Mechanism**: Clients send periodic heartbeat messages to renew their locks. If a client fails to send a heartbeat before the lease expires, the server automatically releases the lock.
-- **State Persistence**: The server's state is saved to a JSON file (`server_state.json`) on startup and shutdown, allowing it to recover its state after crashes.
 
 ### RPC Initialization and Lock Management
 
@@ -50,33 +51,17 @@ The project contains the following main files:
 - The server is implemented using Python’s `socket` library for UDP communication. It listens for client requests in a loop, spawning new threads to handle each request, allowing multiple clients to interact with the server simultaneously.
 - Multithreading is used for both the server and client implementations. The server runs a background thread to monitor lock expiration, while clients run threads to send heartbeat messages without blocking their main operations.
 
-#### Parsing and `__pycache__`
+### Crash Handling
+TODO: improve details here
 
-##### Parsing
+## Network Failure
+- **Lock Expiration**: The server uses a lease mechanism for locks, where a lock is automatically released if not renewed within a specified duration (`LOCK_LEASE_DURATION`). This prevents locks from being held indefinitely due to client crashes.
 
-Parsing is a crucial aspect of the communication between the clients and the server in this distributed system. It involves analyzing incoming messages and extracting relevant information to determine the appropriate actions to take. Here are key points about parsing in the project:
+## Client crash
+- **Heartbeat Mechanism**: Clients send periodic heartbeat messages to renew their locks. If a client fails to send a heartbeat before the lease expires, the server automatically releases the lock.
 
-1. **Message Structure**: The communication between clients and the server follows a predefined message format:
-    `<message_type>:<client_id>:<request_id>:<additional_info>`
-    This structure enables clear and organized communication, ensuring that each part of the message is easily identifiable.
-
-2. **Message Handling**: 
-- In the server's `handle_request` method, incoming messages are parsed using the `split` method to separate the components based on the colon (`:`) delimiter. This allows the server to efficiently retrieve the `message_type`, `client_id`, `request_id`, and any additional information (such as the file name and data to append).
-- Clients also utilize parsing when constructing messages to ensure they conform to the expected format before sending them to the server.
-
-3. **Error Handling**: The parsing process is accompanied by robust error handling to manage cases where the message format is invalid or incomplete. This ensures that the server can respond appropriately and maintain a smooth operation even when faced with unexpected inputs.
-
-##### `__pycache__`
-
-The `__pycache__` directory is a standard feature of Python that plays an important role in optimizing the execution of Python scripts. Here’s how it is relevant to this project:
-
-1. **Performance Optimization**: When Python scripts are executed, the interpreter compiles the source code into bytecode, which is a more efficient representation for execution. The compiled bytecode is stored in the `__pycache__` directory, reducing the need for recompilation in subsequent runs of the same script. This enhances the performance of the application, especially during development and testing.
-
-2. **File Structure**: The `__pycache__` directory contains files named according to the format:
-    `<module_name>.cpython-<version>.pyc`
-    This naming convention includes the module name and the version of the Python interpreter used to create the bytecode, ensuring compatibility across different versions.
-
-3. **Automatic Management**: Python automatically manages the `__pycache__` directory, creating and updating it as needed. Developers typically do not need to interact with this directory directly, and it can be safely ignored in version control systems by including it in a `.gitignore` file.
+## Server crash
+- **State Persistence**: The server's state is saved to a JSON file (`server_state.json`) on startup and shutdown, allowing it to recover its state after crashes.
 
 
 ## Usage

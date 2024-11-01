@@ -1,0 +1,115 @@
+{
+    "current_lock_holder": "client_1",
+    "lock_expiration_time": 1730474894.5986757,
+    "request_history": {},
+    "history": [
+        {
+            "timestamp": 1730473434.307702,
+            "current_lock_holder": "client_1",
+            "lock_expiration_time": 1730473444.3076472,
+            "event": "Lock acquired"
+        },
+        {
+            "timestamp": 1730473434.3193552,
+            "current_lock_holder": null,
+            "lock_expiration_time": null,
+            "event": "Lock released"
+        },
+        {
+            "timestamp": 1730473620.2552404,
+            "current_lock_holder": "client_1",
+            "lock_expiration_time": 1730473630.2550447,
+            "event": "Lock acquired"
+        },
+        {
+            "timestamp": 1730473620.2696264,
+            "current_lock_holder": null,
+            "lock_expiration_time": null,
+            "event": "Lock released"
+        },
+        {
+            "timestamp": 1730473631.9790547,
+            "current_lock_holder": "client_1",
+            "lock_expiration_time": 1730473641.9788415,
+            "event": "Lock acquired"
+        },
+        {
+            "timestamp": 1730473631.9899185,
+            "current_lock_holder": null,
+            "lock_expiration_time": null,
+            "event": "Lock released"
+        },
+        {
+            "timestamp": 1730473653.691954,
+            "current_lock_holder": "client_1",
+            "lock_expiration_time": 1730473663.691582,
+            "event": "Lock acquired"
+        },
+        {
+            "timestamp": 1730473653.703182,
+            "current_lock_holder": null,
+            "lock_expiration_time": null,
+            "event": "Lock released"
+        },
+        {
+            "timestamp": 1730473666.1094003,
+            "current_lock_holder": "client_1",
+            "lock_expiration_time": 1730473676.1090908,
+            "event": "Lock acquired"
+        },
+        {
+            "timestamp": 1730473666.1201453,
+            "current_lock_holder": null,
+            "lock_expiration_time": null,
+            "event": "Lock released"
+        },
+        {
+            "timestamp": 1730474024.9428153,
+            "current_lock_holder": "client_1",
+            "lock_expiration_time": 1730474034.9425788,
+            "event": "Lock acquired"
+        },
+        {
+            "timestamp": 1730474024.9529407,
+            "current_lock_holder": null,
+            "lock_expiration_time": null,
+            "event": "Lock released"
+        },
+        {
+            "timestamp": 1730474130.8673959,
+            "current_lock_holder": "client_1",
+            "lock_expiration_time": 1730474140.8671162,
+            "event": "Lock acquired"
+        },
+        {
+            "timestamp": 1730474130.878611,
+            "current_lock_holder": null,
+            "lock_expiration_time": null,
+            "event": "Lock released"
+        },
+        {
+            "timestamp": 1730474767.84184,
+            "current_lock_holder": "client_1",
+            "lock_expiration_time": 1730474777.841527,
+            "event": "Lock acquired"
+        },
+        {
+            "timestamp": 1730474767.8522646,
+            "current_lock_holder": null,
+            "lock_expiration_time": null,
+            "event": "Lock released"
+        },
+        {
+            "timestamp": 1730474874.5988307,
+            "current_lock_holder": "client_1",
+            "lock_expiration_time": 1730474884.5985231,
+            "event": "Lock acquired"
+        },
+        {
+            "timestamp": 1730474884.599395,
+            "current_lock_holder": "client_1",
+            "lock_expiration_time": 1730474894.5986757,
+            "event": "Lock acquired"
+        }
+    ]
+}

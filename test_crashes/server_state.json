@@ -1,0 +1,13 @@
+{
+    "current_lock_holder": "client_1",
+    "lock_expiration_time": 1730475461.0668118,
+    "request_history": {},
+    "history": [
+        {
+            "timestamp": 1730475451.0668595,
+            "current_lock_holder": "client_1",
+            "lock_expiration_time": 1730475461.0668118,
+            "event": "Lock acquired"
+        }
+    ]
+}
