@@ -8,6 +8,7 @@ import urllib.parse
 FILES_DIR = "server_files"
 NUM_FILES = 100
 LOCK_LEASE_DURATION = 10  # Lease duration in seconds
+STATE_FILE = "server_state.json"
 
 # Ensure the files directory exists and create 100 files
 if not os.path.exists(FILES_DIR):
@@ -24,6 +25,7 @@ class LockManagerServer:
         self.current_lock_holder = None
         self.lock_expiration_time = None  # Stores when the lock should expire
         self.request_history = defaultdict(dict)  # Stores each client's request history
+        self.load_state() # Load any existing state server
 
         # Start background thread to monitor lock expiration
         threading.Thread(target=self.monitor_lock_expiration, daemon=True).start() #client  crash protection
@@ -74,7 +76,6 @@ class LockManagerServer:
         with self.lock:
             if self.current_lock_holder == client_id:
                 file_path = os.path.join(FILES_DIR, file_name)
-                
             
                 # Debugging
                 #print(f"[DEBUG] Client {client_id} holds the lock and is attempting to append to {file_path}.")
@@ -149,7 +150,27 @@ class LockManagerServer:
             return self.renew_lease(client_id)
         else:
             return "Unknown command"
+    
+    def save_state(self):
+        state = {
+            "current_lock_holder": self.current_lock_holder,
+            "lock_expiration_time": self.lock_expiration_time,
+            "request_history": self.request_history
+        }
+        with open(STATE_FILE, "w") as f:
+            json.dump(state, f)
+        print("[DEBUG] Server state saved.")
+
+    def load_state(self):
+        if os.path.exists(STATE_FILE):
+            with open(STATE_FILE, "r") as f:
+                state = json.load(f)
+            self.current_lock_holder = state.get("current_lock_holder")
+            self.lock_expiration_time = state.get("lock_expiration_time")
+            self.request_history = state.get("request_history", defaultdict(dict))
+            print("[DEBUG] Server state loaded.")
         
 if __name__ == "__main__":
     server = LockManagerServer()
     server.start()
+    

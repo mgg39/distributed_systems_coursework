@@ -1,5 +1,2 @@
-Log entry from client_1
-Log entry from client_2
-Log entry from client_3
-Log entry from client_4
-Log entry from client_5
+Log entry from client_1 writing to file_0
+Log entry from client_3 writing to file_0

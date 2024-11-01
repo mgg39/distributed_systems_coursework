@@ -32,7 +32,7 @@ class DistributedClient:
             return response
 
     def acquire_lock(self, max_retries=5, base_interval=1):
-        # Attempt to acquire lock (increasing wait time between attempts)
+        # Attempt to acquire lock (using self.client_id directly)
         retry_interval = base_interval
         for attempt in range(max_retries):
             response = self.send_message("acquire_lock")
@@ -60,15 +60,8 @@ class DistributedClient:
         print(f"{self.client_id}: Failed to acquire lock after {max_retries} attempts.")
         return False
 
-    def send_heartbeat(self):
-            #Send periodic heartbeat to keep lock alive based on lease duration
-            if self.lease_duration:
-                while self.lock_acquired:
-                    self.send_message("heartbeat")
-                    time.sleep(self.lease_duration / 2)  # Send heartbeat halfway through the lease
-
     def release_lock(self):
-        # Releases lock if held
+        # Releases lock if held (using self.client_id directly)
         if self.lock_acquired:
             response = self.send_message("release_lock")
             if response == "unlock success":
@@ -78,6 +71,14 @@ class DistributedClient:
                 print(f"{self.client_id}: Failed to release lock - {response}")
         else:
             print(f"{self.client_id}: Cannot release lock - lock not held by this client.")
+
+    def send_heartbeat(self):
+            #Send periodic heartbeat to keep lock alive based on lease duration
+            if self.lease_duration:
+                while self.lock_acquired:
+                    self.send_message("heartbeat")
+                    time.sleep(self.lease_duration / 2)  # Send heartbeat halfway through the lease
+
 
     def append_file(self, file_name, data):
         # Appends data to file if lock held
