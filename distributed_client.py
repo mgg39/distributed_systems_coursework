@@ -73,7 +73,7 @@ class DistributedClient:
         print(f"{self.client_id}: Connection closed.")
 
 # Example usage
-
+"""
 if __name__ == "__main__":
     client = DistributedClient("client_1")
     
@@ -87,3 +87,4 @@ if __name__ == "__main__":
         client.release_lock()
         # Close the connection
         client.close()
+"""
