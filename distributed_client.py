@@ -6,13 +6,18 @@ class DistributedClient:
         self.client_id = client_id
         self.connection = RPCConnection(server_address, server_port)
         self.lock_acquired = False
+        self.request_id = 0  # Initialize request counter
 
-    def send_message(self, message):
+    def next_request_id(self):
+        # Generates new request ID per request
+        self.request_id += 1
+        return str(self.request_id)
+
+    def send_message(self, message_type, additional_info=""):
+        # Send message with request ID & handle response
+        request_id = self.next_request_id()
+        message = f"{message_type}:{self.client_id}:{request_id}:{additional_info}"
         response = self.connection.rpc_send(message)
-        if response:
-            print(f"{self.client_id}: {response}")
-        else:
-            print(f"{self.client_id}: No response from server (timeout)")
         return response
 
     def acquire_lock(self, max_retries=5, base_interval=1):

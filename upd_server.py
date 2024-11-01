@@ -1,6 +1,7 @@
 import socket
 import os
 import threading
+from collections import defaultdict
 
 # Configuration
 FILES_DIR = "server_files"
@@ -19,40 +20,55 @@ class LockManagerServer:
         self.sock.bind(self.server_address)
         self.lock = threading.Lock()
         self.current_lock_holder = None
+        self.request_history = defaultdict(dict)  # Stores each client's request history
 
     def start(self):
         print(f"Server listening on {self.server_address}")
         while True:
             data, client_address = self.sock.recvfrom(1024)
-            print(f"Received message from {client_address}")
             threading.Thread(target=self.handle_request, args=(data, client_address)).start()
 
     def handle_request(self, data, client_address):
         message = data.decode()
         print(f"Handling message: {message} from {client_address}")
 
-        # Process commands
-        if message == "acquire_lock":
-            response = self.acquire_lock(client_address)
-        elif message == "release_lock":
-            response = self.release_lock(client_address)
-        elif message.startswith("append_file"):
-            _, file_name, file_data = message.split(":", 2)
-            response = self.append_to_file(client_address, file_name, file_data)
+        # Parse message and request ID
+        try:
+            request_type, client_id, request_id = message.split(":", 2)
+        except ValueError:
+            # Handle improperly formatted messages
+            response = "Invalid request format"
+            self.sock.sendto(response.encode(), client_address)
+            return
+
+        # Check request ID has already been processed for this client
+        if request_id in self.request_history[client_id]:
+            previous_response = self.request_history[client_id][request_id]
+            print(f"Duplicate request detected from {client_id} with ID {request_id}. Returning cached response.")
+            self.sock.sendto(previous_response.encode(), client_address)
+            return
+
+        # Process request and store the response
+        if request_type == "acquire_lock":
+            response = self.acquire_lock(client_id)
+        elif request_type == "release_lock":
+            response = self.release_lock(client_id)
+        elif request_type.startswith("append_file"):
+            _, file_name, file_data = request_type.split(":", 2)
+            response = self.append_to_file(client_id, file_name, file_data)
         else:
             response = "Unknown command"
 
-        # Send response back to the client
+        # Store the response in request history
+        self.request_history[client_id][request_id] = response
         self.sock.sendto(response.encode(), client_address)
 
     def acquire_lock(self, client_id):
         with self.lock:
             if self.current_lock_holder is None:
                 self.current_lock_holder = client_id
-                print(f"Lock granted to {client_id}")
                 return "grant lock"
             else:
-                print(f"Lock is currently held by {self.current_lock_holder}")
                 return "Lock is currently held"
 
     def release_lock(self, client_id):
@@ -70,9 +86,9 @@ class LockManagerServer:
                 if os.path.exists(file_path):
                     with open(file_path, 'a') as f:
                         f.write(data + "\n")
-                    return f"Data appended to {file_name}"
+                    return "append success"
                 else:
-                    return f"File {file_name} not found"
+                    return "File not found"
             else:
                 return "You do not hold the lock"
 
