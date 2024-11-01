@@ -26,7 +26,7 @@ class LockManagerServer:
         self.request_history = defaultdict(dict)  # Stores each client's request history
 
         # Start background thread to monitor lock expiration
-        threading.Thread(target=self.monitor_lock_expiration, daemon=True).start()
+        threading.Thread(target=self.monitor_lock_expiration, daemon=True).start() #client  crash protection
 
     def start(self):
         print(f"Server listening on {self.server_address}")
