@@ -1,11 +1,13 @@
 # Distributed Lock Server
 
-This coursework implements a UDP-based lock server for a distributed system as part of the Distributed Systems course at the University of Edinburgh. The server allows multiple clients to safely acquire and release locks on shared resources, demonstrating key concepts of concurrency and fault tolerance.
+This coursework implements a UDP-based (User Datagram Protocol) lock server for a distributed system as part of the Distributed Systems course at the University of Edinburgh. The server allows multiple clients to safely acquire and release locks on shared resources, demonstrating key concepts of concurrency and fault tolerance.
 
 ## Table of Contents
 
 - [Overview](#overview)
 - [File Structure](#file-structure)
+  - [Main](#main)
+  - [Test crashes](#test-crashes)
 - [Implementation Details](#implementation-details)
   - [RPC Initialization and Lock Management](#rpc-initialization-and-lock-management)
   - [Socket Programming and Multithreading](#socket-programming-and-multithreading)
@@ -23,18 +25,21 @@ The system consists of a lock manager server and multiple distributed clients th
 
 The project contains the following folders:
 
-1. Main:
+1. **`Main`**:
 This folders contains the main versions of the code used to build this task:
     1.1. **`upd_server.py`**: Implements the UDP lock server.
     1.2. **`rpc_connection.py`**: Handles RPC connections between clients and the server.
     1.3. **`distributed_client.py`**: Represents the client that interacts with the server to manage locks and append data to files.
     1.4. **`test_client.py`**: Contains a testing framework to simulate multiple clients attempting to acquire locks and write to files.
 
-2. Test_crashes: TODO: fill this
+2. **`Test crashes`**: 
 This folders contains the test performed on the network to ensure fault tolerance:
-    2.1
-    2.2
-    2.3
+    2.1 **`dc_simulated_crashes.py`**: implementation of `distributed_client.py` which includes client timeout and delayed message crash scenarios.
+    2.2 **`rpc_connection_copy.py`**: copy of `rpc_connection.py`.
+    2.3 **`test_client_reconnect_after_server_restart.py`**: test server can restore its state after a restart and client can reconnect and renew/re-acquire the lock as expected.
+    2.4 **`test_crash_mid_operation.py`**: testing client disconnect mid operation.
+    2.5 **`test_multi_client.py`**: testing multi-client server request of logs to different and overlapping files.
+    2.6 **`upd_server_copy.py`**: copy of `upd_server.py`.
 
 ## Implementation Details
 
@@ -52,7 +57,6 @@ This folders contains the test performed on the network to ensure fault toleranc
 - Multithreading is used for both the server and client implementations. The server runs a background thread to monitor lock expiration, while clients run threads to send heartbeat messages without blocking their main operations.
 
 ### Crash Handling
-TODO: improve details here
 
 ## Network Failure
 - **Lock Expiration**: The server uses a lease mechanism for locks, where a lock is automatically released if not renewed within a specified duration (`LOCK_LEASE_DURATION`). This prevents locks from being held indefinitely due to client crashes.

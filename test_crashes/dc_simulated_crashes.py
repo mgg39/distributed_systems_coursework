@@ -1,7 +1,7 @@
 '''
 This file simulates the following scenarios:
--Client Timeout: client fails to send heartbeat messages, letting lock expire
--Delayed Message: server handles out-of-order or delayed messages, ensuring that server does not incorrectly extend expired locks
+- Client Timeout: client fails to send heartbeat messages, letting lock expire
+- Delayed Message: server handles out-of-order or delayed messages, ensuring that server does not incorrectly extend expired locks
 '''
 
 import socket
