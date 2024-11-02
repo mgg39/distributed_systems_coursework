@@ -78,7 +78,7 @@ class DistributedClient:
         else:
             print(f"{self.client_id}: Cannot release lock - lock not held by this client.")
 
-    def send_heartbeat(self, simulate_network_issue=False, delay_heartbeat=False): #Client Timeout #Delayed Message
+    def send_heartbeat(self, simulate_network_issue=True, delay_heartbeat=True): #Client Timeout #Delayed Message
         # Send periodic heartbeat to keep lock alive
         if self.lease_duration:
             while self.lock_acquired:
