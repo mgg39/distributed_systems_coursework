@@ -140,6 +140,78 @@
             "current_lock_holder": null,
             "lock_expiration_time": null,
             "event": "Lock released"
+        },
+        {
+            "timestamp": 1731000466.5529912,
+            "current_lock_holder": "client_1",
+            "lock_expiration_time": 1731000476.5525942,
+            "event": "Lock acquired"
+        },
+        {
+            "timestamp": 1731000477.5241685,
+            "current_lock_holder": null,
+            "lock_expiration_time": null,
+            "event": "Lock released"
+        },
+        {
+            "timestamp": 1731000482.5695167,
+            "current_lock_holder": "client_1",
+            "lock_expiration_time": 1731000492.5693467,
+            "event": "Lock acquired"
+        },
+        {
+            "timestamp": 1731000508.5329497,
+            "current_lock_holder": null,
+            "lock_expiration_time": null,
+            "event": "Lock released"
+        },
+        {
+            "timestamp": 1731000530.6044447,
+            "current_lock_holder": "client_1",
+            "lock_expiration_time": 1731000540.6039991,
+            "event": "Lock acquired"
+        },
+        {
+            "timestamp": 1731000530.606958,
+            "current_lock_holder": null,
+            "lock_expiration_time": null,
+            "event": "Lock released"
+        },
+        {
+            "timestamp": 1731000975.3228812,
+            "current_lock_holder": "client_1",
+            "lock_expiration_time": 1731000985.3224077,
+            "event": "Lock acquired"
+        },
+        {
+            "timestamp": 1731000985.3707216,
+            "current_lock_holder": null,
+            "lock_expiration_time": null,
+            "event": "Lock released"
+        },
+        {
+            "timestamp": 1731001009.3528574,
+            "current_lock_holder": "client_1",
+            "lock_expiration_time": 1731001019.3523426,
+            "event": "Lock acquired"
+        },
+        {
+            "timestamp": 1731001030.4041045,
+            "current_lock_holder": null,
+            "lock_expiration_time": null,
+            "event": "Lock released"
+        },
+        {
+            "timestamp": 1731001058.3906918,
+            "current_lock_holder": "client_1",
+            "lock_expiration_time": 1731001068.3902128,
+            "event": "Lock acquired"
+        },
+        {
+            "timestamp": 1731001058.393609,
+            "current_lock_holder": null,
+            "lock_expiration_time": null,
+            "event": "Lock released"
         }
     ]
 }

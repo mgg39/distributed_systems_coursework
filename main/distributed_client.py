@@ -121,6 +121,7 @@ class DistributedClient:
         return False
 
 
+"""
 # Example usage
 if __name__ == "__main__":
     # Provide list of known server addresses
@@ -137,3 +138,4 @@ if __name__ == "__main__":
         client.release_lock()
         # Close the connection
         client.close()
+"""
