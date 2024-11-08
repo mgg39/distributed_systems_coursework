@@ -379,8 +379,15 @@ def main():
         for filename in os.listdir(output_folder):
             file_path = os.path.join(output_folder, filename)
             os.remove(file_path)
+    
+    with open(summary_file, "a") as summary:
+        summary.write("Test Summary\n")
+        summary.write("====================\n")
+        
+        # Phase 1: Core Tests
+        summary.write("Phase 1: Core Tests\n")
+        summary.write("--------------------\n")
 
-    # Phase 1
     run_test(network_failure_packet_delay, "network_failure_packet_delay", 50)
     run_test(network_failure_packet_drop_client_loss, "network_failure_packet_drop_client_loss", 50)
     run_test(network_failure_packet_drop_server_loss, "network_failure_packet_drop_server_loss", 50)
@@ -393,7 +400,11 @@ def main():
     run_test(single_server_failure_lock_free, "single_server_failure_lock_free", 50)
     run_test(single_server_failure_lock_held, "single_server_failure_lock_held", 50)
     
-    # Phase 2
+    # Phase 2: Randomized crash tests
+    with open(summary_file, "a") as summary:
+        summary.write("\nPhase 2: Randomized Crash Tests\n")
+        summary.write("-------------------------------\n")
+
     for i in range(2000):
         test_id = f"randomized_crash_test_{i+1}"
         run_randomized_crash_test(test_id)
