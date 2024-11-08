@@ -1,6 +1,6 @@
 {
-    "current_lock_holder": null,
-    "lock_expiration_time": null,
+    "current_lock_holder": "client_1",
+    "lock_expiration_time": 1731063626.0252805,
     "request_history": {},
     "history": [
         {
@@ -236,6 +236,12 @@
             "current_lock_holder": null,
             "lock_expiration_time": null,
             "event": "Lock released"
+        },
+        {
+            "timestamp": 1731063616.0257134,
+            "current_lock_holder": "client_1",
+            "lock_expiration_time": 1731063626.0252805,
+            "event": "Lock acquired"
         }
     ]
 }

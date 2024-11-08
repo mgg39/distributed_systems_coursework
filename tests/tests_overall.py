@@ -299,29 +299,29 @@ def run_test(test_function, test_name, iterations):
 
 # Phase 2: Multi client randomized Crash Test (2000)
 def run_randomized_crash_test(test_id):
+    test_id = f"multi_crash_{test_id}"  # Prefix for easy identification
     output_file = os.path.join(output_folder, f"{test_id}.txt")
-    events = []  # Track events for each client in this test
-    success = True  # Assume success unless we encounter a failure
     
     with open(output_file, "w") as f:
-        # Metadata logging
         f.write(f"Test ID: {test_id}\n")
         f.write("Randomized Crash Test with 5-10 Clients\n")
         f.write(f"Start Time: {datetime.now()}\n\n")
-
-        # Generate random events and clients
+        
+        # Randomized client events and logging
         num_clients = random.randint(5, 10)
+        events = []
+        
         for i in range(num_clients):
             client_event = random.choice(["acquire_lock", "append_file", "release_lock", "stall", "packet_delay", "packet_drop"])
             events.append((f"client_{i+1}", client_event))
         
-        # Log chosen events
         f.write("Event Sequence:\n")
         for client, event in events:
             f.write(f"  - {client} will {event}\n")
         f.write("\n")
-
-        # Execute
+        
+        # Execute events and log results
+        success = True
         for client_id, event in events:
             client = DistributedClient(client_id=client_id, replicas=[("localhost", 8080)])
             
@@ -357,21 +357,30 @@ def run_randomized_crash_test(test_id):
 
         f.write(f"End Time: {datetime.now()}\n")
         result = "PASS" if success else "FAIL"
-
-    # Log test results to summary file
+        
+    # Incremental summary update
     with open(summary_file, "a") as summary:
-        if result == "PASS":
-            summary.write(f"randomized_crash_test - {test_id}: PASS\n")
-        else:
-            summary.write(f"randomized_crash_test - {test_id}: FAIL\n")
+        summary.write(f"{test_id}: {result}\n")
+        if not success:
             summary.write(f"  - {num_clients} clients, events: {[event for _, event in events]}\n")
-            summary.write(f"  - Failed events:\n")
+            summary.write("  - Failed events:\n")
             for client, event in events:
                 if event in ["acquire_lock", "append_file", "release_lock"] and "FAIL" in locals():
                     summary.write(f"    - {client} experienced {event} failure\n")
 
+import os
+
 def main():
-    # Core tests
+    # Clear previous test results
+    if os.path.exists(summary_file):
+        os.remove(summary_file)
+    
+    if os.path.exists(output_folder):
+        for filename in os.listdir(output_folder):
+            file_path = os.path.join(output_folder, filename)
+            os.remove(file_path)
+
+    # Phase 1
     run_test(network_failure_packet_delay, "network_failure_packet_delay", 50)
     run_test(network_failure_packet_drop_client_loss, "network_failure_packet_drop_client_loss", 50)
     run_test(network_failure_packet_drop_server_loss, "network_failure_packet_drop_server_loss", 50)
@@ -384,12 +393,12 @@ def main():
     run_test(single_server_failure_lock_free, "single_server_failure_lock_free", 50)
     run_test(single_server_failure_lock_held, "single_server_failure_lock_held", 50)
     
-    # Run the randomized crash test 2000 times
+    # Phase 2
     for i in range(2000):
         test_id = f"randomized_crash_test_{i+1}"
         run_randomized_crash_test(test_id)
 
-    # Generate summary report
+    # Summary report at end
     with open(summary_file, "w") as summary:
         summary.write("Test Summary\n")
         summary.write("====================\n")
