@@ -14,6 +14,27 @@ class DistributedClient:
         self.request_id = 0  # Initialize request counter
         self.lease_duration = None
 
+        def find_leader(self):
+        for address in self.replicas:
+            self.connection = RPCConnection(*address)
+            response = self.connection.rpc_send(f"identify_leader:{self.client_id}")
+            
+            if response == "I am the leader":
+                self.current_leader = address
+                return True  # Leader found
+            elif response.startswith("Redirect to leader"):
+                try:
+                    host, port = response.split(":")[2:]
+                    self.current_leader = (host, int(port))
+                    self.connection = RPCConnection(*self.current_leader)
+                    return True
+                except ValueError:
+                    continue  # Skip if response malformed
+
+        print(f"{self.client_id}: No reachable leader among replicas {self.replicas}")
+        self.current_leader = None
+        return False
+
     def next_request_id(self):
         # Generates new request ID per request
         self.request_id += 1
@@ -102,23 +123,6 @@ class DistributedClient:
             self.connection.close()
         print(f"{self.client_id}: Connection closed.")
 
-    def find_leader(self):
-        for address in self.replicas:
-            self.connection = RPCConnection(*address)
-            response = self.connection.rpc_send(f"identify_leader:{self.client_id}")
-
-            if response == "I am the leader":
-                print(f"[DEBUG] Leader identified at {address}")
-                self.current_leader = address
-                return True
-            elif response.startswith("Redirect to leader"):
-                # Extract leader's address if provided in the response
-                host, port = response.split(":")[2:]
-                self.current_leader = (host, int(port))
-                print(f"[DEBUG] Redirected to leader at {self.current_leader}")
-                self.connection = RPCConnection(*self.current_leader)
-                return True
-        return False
 
 
 """

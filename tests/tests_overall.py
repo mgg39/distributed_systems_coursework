@@ -1,3 +1,5 @@
+import contextlib
+import sys
 import os
 import time
 import random
@@ -19,10 +21,13 @@ summary_stats = {
     "single_server_failure_lock_held": {"total": 0, "success": 0, "failed": []},
 }
 
-# output folder
 os.makedirs(output_folder, exist_ok=True)
 
-# Helper functions for logging results
+def log_to_file_and_console(message, file_handle):
+    print(message)
+    file_handle.write(message + "\n")
+    file_handle.flush()
+
 def log_result(test_name, success, test_id):
     summary_stats[test_name]["total"] += 1
     if success:
@@ -30,198 +35,197 @@ def log_result(test_name, success, test_id):
     else:
         summary_stats[test_name]["failed"].append(test_id)
 
-# Test cases
-#Network ----------------------------------------------------------------------------------
+# Network Failure Tests
 
-def network_failure_packet_delay(test_id):
+def network_failure_packet_delay(test_id, f):
     try:
         client1 = DistributedClient(client_id="client_1", replicas=[("localhost", 8080)])
         client2 = DistributedClient(client_id="client_2", replicas=[("localhost", 8081)])
         
-        # Client 1 acquires lock
+        log_to_file_and_console(f"{test_id} - Client 1 attempting to acquire lock", f)
         lock_acquired = client1.acquire_lock()
         if not lock_acquired:
+            log_to_file_and_console(f"{test_id} - Client 1 failed to acquire lock", f)
             log_result("network_failure_packet_delay", False, test_id)
-            return False  # Fail if lock not acquired
+            return False
         
-        # Simulate delay (just under lease duration)
         time.sleep(LOCK_LEASE_DURATION - 1)
-        
-        # Client 1 attempts append (should succeed if within lease)
         result = client1.append_file("file_A", "data_A")
         
-        # Client 2 attempts to acquire lock (should get it after expiration)
-        time.sleep(2)  # Ensure `LOCK_LEASE_DURATION` has passed
+        time.sleep(2)
         lock_acquired_client2 = client2.acquire_lock()
         
-        # Log result based on outcomes
         success = lock_acquired and lock_acquired_client2
+        log_to_file_and_console(f"{test_id} - Test result: {'PASS' if success else 'FAIL'}", f)
         log_result("network_failure_packet_delay", success, test_id)
         return success
 
     except Exception as e:
-        print(f"Exception in {test_id}: {e}")
+        log_to_file_and_console(f"{test_id} - Exception: {e}", f)
         log_result("network_failure_packet_delay", False, test_id)
         return False
-    
-def network_failure_packet_drop_server_loss(test_id):
+
+def network_failure_packet_drop_server_loss(test_id, f):
     try:
         client1 = DistributedClient(client_id="client_1", replicas=[("localhost", 8080)])
         client2 = DistributedClient(client_id="client_2", replicas=[("localhost", 8081)])
         
-        # Simulate server packet loss by not receiving initial lock confirmation for client1
-        client1.acquire_lock()  # Assume server "drops" response
-        client1.append_file("file_A", "data_A")  # Retry after confirming lock ownership
-        
-        # client2 acquires and appends after client1 releases the lock
-        client1.release_lock()
-        client2.acquire_lock()
-        result = client2.append_file("file_B", "data_B")
-        
-        # Check for sequence "AB" in the file
-        success = result == "PASS"  # Adjust based on expected server output format
-        log_result("network_failure_packet_drop_server_loss", success, test_id)
-        return success
-    except Exception as e:
-        log_result("network_failure_packet_drop_server_loss", False, test_id)
-        return False
-    
-def network_failure_packet_drop_client_loss(test_id):
-    try:
-        client1 = DistributedClient(client_id="client_1", replicas=[("localhost", 8080)])
-        client2 = DistributedClient(client_id="client_2", replicas=[("localhost", 8081)])
-        
-        # Simulate packet drop by skipping client1's initial acquire attempt
-        client2.acquire_lock()
-        result = client2.append_file("file_B", "data_B")
-        
-        # client1 retries and acquires the lock after client2 releases it
-        client2.release_lock()
+        log_to_file_and_console(f"{test_id} - Simulating server packet loss for client 1 lock acquisition", f)
         client1.acquire_lock()
         result = client1.append_file("file_A", "data_A")
         
-        # Check for sequence "BA" in the file
-        success = result == "PASS"  # Adjust based on expected server output format
+        client1.release_lock()
+        lock_acquired_client2 = client2.acquire_lock()
+        result = client2.append_file("file_B", "data_B")
+        
+        success = result == "append success"
+        log_to_file_and_console(f"{test_id} - Test result: {'PASS' if success else 'FAIL'}", f)
+        log_result("network_failure_packet_drop_server_loss", success, test_id)
+        return success
+    except Exception as e:
+        log_to_file_and_console(f"{test_id} - Exception: {e}", f)
+        log_result("network_failure_packet_drop_server_loss", False, test_id)
+        return False
+
+def network_failure_packet_drop_client_loss(test_id, f):
+    try:
+        client1 = DistributedClient(client_id="client_1", replicas=[("localhost", 8080)])
+        client2 = DistributedClient(client_id="client_2", replicas=[("localhost", 8081)])
+        
+        log_to_file_and_console(f"{test_id} - Simulating client 1 packet loss", f)
+        lock_acquired_client2 = client2.acquire_lock()
+        result = client2.append_file("file_B", "data_B")
+        
+        client2.release_lock()
+        lock_acquired_client1 = client1.acquire_lock()
+        result = client1.append_file("file_A", "data_A")
+        
+        success = result == "append success"
+        log_to_file_and_console(f"{test_id} - Test result: {'PASS' if success else 'FAIL'}", f)
         log_result("network_failure_packet_drop_client_loss", success, test_id)
         return success
     except Exception as e:
+        log_to_file_and_console(f"{test_id} - Exception: {e}", f)
         log_result("network_failure_packet_drop_client_loss", False, test_id)
         return False
 
-def network_failure_duplicated_packets(test_id):
+def network_failure_duplicated_packets(test_id, f):
     try:
         client1 = DistributedClient(client_id="client_1", replicas=[("localhost", 8080)])
         client2 = DistributedClient(client_id="client_2", replicas=[("localhost", 8081)])
         
+        log_to_file_and_console(f"{test_id} - Client 1 acquiring lock and appending", f)
         client1.acquire_lock()
         client1.append_file("file_A", "data_A")
         
-        # Simulate duplicate `release_lock` call
         client1.release_lock()
-        client1.release_lock()  # Duplicate
+        log_to_file_and_console(f"{test_id} - Simulating duplicated release", f)
+        client1.release_lock() 
         
-        # client2 acquires lock and appends
-        client2.acquire_lock()
+        lock_acquired_client2 = client2.acquire_lock()
         result = client2.append_file("file_B", "data_B")
         
-        # Check for "ABBA" sequence in the file
-        success = result == "PASS"  # Adjust based on expected server output format
+        success = result == "append success"
+        log_to_file_and_console(f"{test_id} - Test result: {'PASS' if success else 'FAIL'}", f)
         log_result("network_failure_duplicated_packets", success, test_id)
         return success
     except Exception as e:
+        log_to_file_and_console(f"{test_id} - Exception: {e}", f)
         log_result("network_failure_duplicated_packets", False, test_id)
         return False
 
-def network_failure_combined_failures(test_id):
+def network_failure_combined_failures(test_id, f):
     try:
         client1 = DistributedClient(client_id="client_1", replicas=[("localhost", 8080)])
         client2 = DistributedClient(client_id="client_2", replicas=[("localhost", 8081)])
         
+        log_to_file_and_console(f"{test_id} - Client 1 acquiring lock and appending", f)
         client1.acquire_lock()
         client1.append_file("file_1", "data_1")
         
-        # Simulate lost append for "A" and retry
         client1.append_file("file_A", "data_A")
         
-        # client1 releases, client2 acquires and appends
         client1.release_lock()
-        client2.acquire_lock()
+        lock_acquired_client2 = client2.acquire_lock()
         result = client2.append_file("file_B", "data_B")
         
-        # Expect "1AB" in file
-        success = result == "PASS"  # Adjust based on expected server output format
+        success = result == "append success"
+        log_to_file_and_console(f"{test_id} - Test result: {'PASS' if success else 'FAIL'}", f)
         log_result("network_failure_combined_failures", success, test_id)
         return success
     except Exception as e:
+        log_to_file_and_console(f"{test_id} - Exception: {e}", f)
         log_result("network_failure_combined_failures", False, test_id)
         return False
 
-#Client ----------------------------------------------------------------------------------
+# Client Failure Tests
 
-def client_failure_stall_before_edit(test_id):
+def client_failure_stall_before_edit(test_id, f):
     try:
         client1 = DistributedClient(client_id="client_1", replicas=[("localhost", 8080)])
         client2 = DistributedClient(client_id="client_2", replicas=[("localhost", 8081)])
         
         client1.acquire_lock()
-        time.sleep(LOCK_LEASE_DURATION + 1)  # Simulate stall that exceeds lease duration
+        time.sleep(LOCK_LEASE_DURATION + 1)
         
-        # Client 2 acquires the lock after timeout and appends
-        client2.acquire_lock()
+        lock_acquired_client2 = client2.acquire_lock()
         result = client2.append_file("file_B", "data_B")
         
-        success = result == "PASS"  # Adjust based on expected server output format
+        success = result == "append success"
+        log_to_file_and_console(f"{test_id} - Test result: {'PASS' if success else 'FAIL'}", f)
         log_result("client_failure_stall_before_edit", success, test_id)
         return success
     except Exception as e:
+        log_to_file_and_console(f"{test_id} - Exception: {e}", f)
         log_result("client_failure_stall_before_edit", False, test_id)
         return False
 
-def client_failure_stall_after_edit(test_id):
+def client_failure_stall_after_edit(test_id, f):
     try:
         client1 = DistributedClient(client_id="client_1", replicas=[("localhost", 8080)])
         client2 = DistributedClient(client_id="client_2", replicas=[("localhost", 8081)])
         
         client1.acquire_lock()
         client1.append_file("file_A", "data_A")
-        time.sleep(LOCK_LEASE_DURATION + 1)  # Simulate stall that exceeds lease duration
+        time.sleep(LOCK_LEASE_DURATION + 1)
         
-        # Client 2 acquires and appends after client1 times out
-        client2.acquire_lock()
+        lock_acquired_client2 = client2.acquire_lock()
         result = client2.append_file("file_B", "data_B")
         
-        success = result == "PASS"  # Adjust based on expected server output format
+        success = result == "append success"
+        log_to_file_and_console(f"{test_id} - Test result: {'PASS' if success else 'FAIL'}", f)
         log_result("client_failure_stall_after_edit", success, test_id)
         return success
     except Exception as e:
+        log_to_file_and_console(f"{test_id} - Exception: {e}", f)
         log_result("client_failure_stall_after_edit", False, test_id)
         return False
 
-#Server ----------------------------------------------------------------------------------
+# Server Failure Tests
 
-def single_server_failure_lock_free(test_id):
+def single_server_failure_lock_free(test_id, f):
     try:
         client1 = DistributedClient(client_id="client_1", replicas=[("localhost", 8080)])
         
         client1.acquire_lock()
         client1.append_file("file_A", "data_A")
         
-        # Simulate server restart
         client1.release_lock()
-        time.sleep(2)  # Allow time for server to "recover"
+        time.sleep(2)
         
-        # client1 re-acquires and appends
         client1.acquire_lock()
         result = client1.append_file("file_1", "data_1")
         
-        success = result == "PASS"  # Adjust based on expected server output format
+        success = result == "append success"
+        log_to_file_and_console(f"{test_id} - Test result: {'PASS' if success else 'FAIL'}", f)
         log_result("single_server_failure_lock_free", success, test_id)
         return success
     except Exception as e:
+        log_to_file_and_console(f"{test_id} - Exception: {e}", f)
         log_result("single_server_failure_lock_free", False, test_id)
         return False
 
-def single_server_failure_lock_held(test_id):
+def single_server_failure_lock_held(test_id, f):
     try:
         client1 = DistributedClient(client_id="client_1", replicas=[("localhost", 8080)])
         client2 = DistributedClient(client_id="client_2", replicas=[("localhost", 8081)])
@@ -230,21 +234,21 @@ def single_server_failure_lock_held(test_id):
         client1.append_file("file_A", "data_A")
         client1.release_lock()
         
-        # client2 acquires lock and appends, then server "crashes and recovers"
-        client2.acquire_lock()
+        lock_acquired_client2 = client2.acquire_lock()
         client2.append_file("file_B", "data_B")
-        time.sleep(2)  # Simulate server recovery
+        time.sleep(2)
         
         result = client2.append_file("file_B", "data_B")
         
-        # Expected file sequence: "ABBA"
-        success = result == "PASS"  # Adjust based on expected server output format
+        success = result == "append success"
+        log_to_file_and_console(f"{test_id} - Test result: {'PASS' if success else 'FAIL'}", f)
         log_result("single_server_failure_lock_held", success, test_id)
         return success
     except Exception as e:
+        log_to_file_and_console(f"{test_id} - Exception: {e}", f)
         log_result("single_server_failure_lock_held", False, test_id)
         return False
-
+    
 # Run 
 
 # Phase 1: iterations of specific test functions (50 per test type)
@@ -256,119 +260,79 @@ def run_test(test_function, test_name, iterations):
         test_id = f"{test_name}_{i+1}"
         output_file = os.path.join(output_folder, f"{test_id}.txt")
         
-        # Log to individual test file
         with open(output_file, "w") as f:
-            f.write(f"Test ID: {test_id}\n")
-            f.write(f"Test: {test_name}\n")
-            f.write(f"Iteration: {i+1}\n")
-            f.write(f"Start Time: {datetime.now()}\n")
+            log_to_file_and_console(f"Test ID: {test_id}", f)
+            log_to_file_and_console(f"Test: {test_name}", f)
+            log_to_file_and_console(f"Iteration: {i+1}", f)
+            log_to_file_and_console(f"Start Time: {datetime.now()}", f)
             
-            success = test_function(test_id)
+            # Run the test function and log detailed output
+            success = test_function(test_id, f)
             result = "PASS" if success else "FAIL"
             
-            f.write(f"Result: {result}\n")
-            f.write(f"End Time: {datetime.now()}\n")
-        
-        # Update summary stats
-        summary_stats[test_name]["total"] += 1
-        if success:
-            summary_stats[test_name]["success"] += 1
-        else:
-            summary_stats[test_name]["failed"].append(test_id)
-        
-        # Incremental logging to summary file
-        with open(summary_file, "a") as summary:
-            summary.write(f"{test_name} - {test_id}: {result}\n")
-            
-            # Every 10 tests, update summary overview
-            if summary_stats[test_name]["total"] % 10 == 0:
-                summary.write("\n--- Ongoing Summary ---\n")
-                completed = summary_stats[test_name]["total"]
-                remaining = iterations - completed
-                success_count = summary_stats[test_name]["success"]
-                failures = summary_stats[test_name]["failed"]
-                
-                summary.write(f"Completed tests: {completed}\n")
-                summary.write(f"Remaining tests: {remaining}\n")
-                summary.write(f"Successful: {success_count}/{completed}\n")
-                if failures:
-                    summary.write("Failed tests:\n")
-                    for fail in failures:
-                        summary.write(f"  - {fail}\n")
-                summary.write("\n")
+            log_to_file_and_console(f"Result: {result}", f)
+            log_to_file_and_console(f"End Time: {datetime.now()}", f)
 
 # Phase 2: Multi client randomized Crash Test (2000)
 def run_randomized_crash_test(test_id):
-    test_id = f"multi_crash_{test_id}"  # Prefix for easy identification
+    test_id = f"multi_crash_{test_id}"
     output_file = os.path.join(output_folder, f"{test_id}.txt")
     
     with open(output_file, "w") as f:
-        f.write(f"Test ID: {test_id}\n")
-        f.write("Randomized Crash Test with 5-10 Clients\n")
-        f.write(f"Start Time: {datetime.now()}\n\n")
-        
-        # Randomized client events and logging
+        log_to_file_and_console(f"Test ID: {test_id}", f)
+        log_to_file_and_console("Randomized Crash Test with 5-10 Clients", f)
+        log_to_file_and_console(f"Start Time: {datetime.now()}\n", f)
+
+        # Generate random events and clients
         num_clients = random.randint(5, 10)
         events = []
-        
+
         for i in range(num_clients):
             client_event = random.choice(["acquire_lock", "append_file", "release_lock", "stall", "packet_delay", "packet_drop"])
             events.append((f"client_{i+1}", client_event))
         
-        f.write("Event Sequence:\n")
+        log_to_file_and_console("Event Sequence:", f)
         for client, event in events:
-            f.write(f"  - {client} will {event}\n")
-        f.write("\n")
+            log_to_file_and_console(f"  - {client} will {event}", f)
+        log_to_file_and_console("\n", f)
         
-        # Execute events and log results
+        # Execute events and capture detailed logs
         success = True
         for client_id, event in events:
             client = DistributedClient(client_id=client_id, replicas=[("localhost", 8080)])
             
             if event == "acquire_lock":
                 result = client.acquire_lock()
-                f.write(f"{client_id} tried to acquire lock: {result}\n")
+                log_to_file_and_console(f"{client_id} tried to acquire lock: {result}", f)
                 if result != "PASS":
                     success = False
             
             elif event == "append_file":
                 result = client.append_file("test_file", "data")
-                f.write(f"{client_id} attempted to append to file: {result}\n")
+                log_to_file_and_console(f"{client_id} attempted to append to file: {result}", f)
                 if result != "PASS":
                     success = False
             
             elif event == "release_lock":
                 result = client.release_lock()
-                f.write(f"{client_id} released lock: {result}\n")
+                log_to_file_and_console(f"{client_id} released lock: {result}", f)
                 if result != "PASS":
                     success = False
             
             elif event == "stall":
+                log_to_file_and_console(f"{client_id} stalled for lock timeout.", f)
                 time.sleep(LOCK_LEASE_DURATION + 1)
-                f.write(f"{client_id} stalled for lock timeout.\n")
             
             elif event == "packet_delay":
-                time.sleep(2)  # Short delay
-                f.write(f"{client_id} experienced simulated packet delay.\n")
+                log_to_file_and_console(f"{client_id} experienced simulated packet delay.", f)
+                time.sleep(2)
             
             elif event == "packet_drop":
-                f.write(f"{client_id} encountered simulated packet drop. No action taken.\n")
+                log_to_file_and_console(f"{client_id} encountered simulated packet drop. No action taken.", f)
                 continue
 
-        f.write(f"End Time: {datetime.now()}\n")
+        log_to_file_and_console(f"End Time: {datetime.now()}", f)
         result = "PASS" if success else "FAIL"
-        
-    # Incremental summary update
-    with open(summary_file, "a") as summary:
-        summary.write(f"{test_id}: {result}\n")
-        if not success:
-            summary.write(f"  - {num_clients} clients, events: {[event for _, event in events]}\n")
-            summary.write("  - Failed events:\n")
-            for client, event in events:
-                if event in ["acquire_lock", "append_file", "release_lock"] and "FAIL" in locals():
-                    summary.write(f"    - {client} experienced {event} failure\n")
-
-import os
 
 def main():
     # Clear previous test results
@@ -388,18 +352,46 @@ def main():
         summary.write("Phase 1: Core Tests\n")
         summary.write("--------------------\n")
 
-    run_test(network_failure_packet_delay, "network_failure_packet_delay", 50)
-    run_test(network_failure_packet_drop_client_loss, "network_failure_packet_drop_client_loss", 50)
-    run_test(network_failure_packet_drop_server_loss, "network_failure_packet_drop_server_loss", 50)
-    run_test(network_failure_duplicated_packets, "network_failure_duplicated_packets", 50)
-    run_test(network_failure_combined_failures, "network_failure_combined_failures", 50)
+    # Define each test name and function to run in Phase 1
+    tests = [
+        (network_failure_packet_delay, "network_failure_packet_delay", 1),
+        """
+        (network_failure_packet_drop_client_loss, "network_failure_packet_drop_client_loss", 1),
+        (network_failure_packet_drop_server_loss, "network_failure_packet_drop_server_loss", 1),
+        (network_failure_duplicated_packets, "network_failure_duplicated_packets", 1),
+        (network_failure_combined_failures, "network_failure_combined_failures", 1),
+        (client_failure_stall_before_edit, "client_failure_stall_before_edit", 1),
+        (client_failure_stall_after_edit, "client_failure_stall_after_edit", 1),
+        (single_server_failure_lock_free, "single_server_failure_lock_free", 1),
+        (single_server_failure_lock_held, "single_server_failure_lock_held", 1)
+        """
+    ]
     
-    run_test(client_failure_stall_before_edit, "client_failure_stall_before_edit", 50)
-    run_test(client_failure_stall_after_edit, "client_failure_stall_after_edit", 50)
-    
-    run_test(single_server_failure_lock_free, "single_server_failure_lock_free", 50)
-    run_test(single_server_failure_lock_held, "single_server_failure_lock_held", 50)
-    
+    # Run each test with redirected stdout to capture all outputs
+    for test_func, test_name, iterations in tests:
+        for i in range(iterations):
+            test_id = f"{test_name}_{i+1}"
+            output_file = os.path.join(output_folder, f"{test_id}.txt")
+            
+            # Redirect all stdout to the test-specific output file
+            with open(output_file, "w") as f:
+                with contextlib.redirect_stdout(f):
+                    print(f"Test ID: {test_id}")
+                    print(f"Test: {test_name}")
+                    print(f"Iteration: {i+1}")
+                    print(f"Start Time: {datetime.now()}")
+                    
+                    # Run the test and log results
+                    success = test_func(test_id, f)
+                    result = "PASS" if success else "FAIL"
+                    
+                    print(f"Result: {result}")
+                    print(f"End Time: {datetime.now()}")
+                    
+                    # Log result in summary_stats
+                    log_result(test_name, success, test_id)
+                    
+    """    
     # Phase 2: Randomized crash tests
     with open(summary_file, "a") as summary:
         summary.write("\nPhase 2: Randomized Crash Tests\n")
@@ -408,9 +400,9 @@ def main():
     for i in range(2000):
         test_id = f"randomized_crash_test_{i+1}"
         run_randomized_crash_test(test_id)
-
-    # Summary report at end
-    with open(summary_file, "w") as summary:
+    """
+    # Final summary report at end
+    with open(summary_file, "a") as summary:
         summary.write("Test Summary\n")
         summary.write("====================\n")
         for test_name, stats in summary_stats.items():
@@ -426,3 +418,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

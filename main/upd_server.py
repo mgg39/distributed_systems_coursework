@@ -9,7 +9,7 @@ import random
 
 FILES_DIR = "server_files"
 NUM_FILES = 100
-LOCK_LEASE_DURATION = 10  # Lease duration in seconds
+LOCK_LEASE_DURATION = 20  # Lease duration in seconds
 STATE_FILE = "server_state.json"
 
 # Ensure the files directory exists and create 100 files
@@ -57,19 +57,17 @@ class LockManagerServer:
     # Lock state replication
     def acquire_lock(self, client_id):
         if self.role == 'leader':
-            # Attempt to acquire lock and set lease expiration if successful
             with self.lock:
                 current_time = time.time()
-                if self.current_lock_holder is None or (self.lock_expiration_time and current_time > self.lock_expiration_time):
-                    self.current_lock_holder = client_id  # Set current_lock_holder
-                    self.lock_expiration_time = current_time + LOCK_LEASE_DURATION  # Set lock_expiration_time
-                    print(f"[DEBUG] {client_id} acquired the lock with expiration {self.lock_expiration_time}")
-                    self.save_state()  # Save state after setting vars
-                    # Replicate state to followers
+                if not self.current_lock_holder or (self.lock_expiration_time and current_time > self.lock_expiration_time):
+                    self.current_lock_holder = client_id
+                    self.lock_expiration_time = current_time + LOCK_LEASE_DURATION
+                    self.save_state()
                     for peer in self.peers:
                         self.sock.sendto(f"append_entry:{self.term}:{client_id}".encode(), peer)
                     return f"grant lock:{LOCK_LEASE_DURATION}"
                 else:
+                    print(f"Lock currently held by {self.current_lock_holder}, cannot grant to {client_id}")
                     return "Lock is currently held"
         else:
             return "Redirect to leader"
@@ -122,62 +120,29 @@ class LockManagerServer:
                 return "You do not hold the lock"
 
     def monitor_lock_expiration(self):
-        #Background task to check and release expired locks
         while True:
             with self.lock:
                 if self.current_lock_holder and self.lock_expiration_time and time.time() > self.lock_expiration_time:
-                    print(f"Lock held by {self.current_lock_holder} has expired. Releasing lock.")
+                    print(f"Lock held by {self.current_lock_holder} expired, releasing lock")
                     self.current_lock_holder = None
                     self.lock_expiration_time = None
-                    self.save_state()  # Save state after automatic release due to expiration
-            time.sleep(1)  # Check every second
-
+                    self.save_state()  # Save state after lock expiration
+            time.sleep(1)
         
     def handle_request(self, data, client_address):
         message = data.decode()
-        print(f"Handling message: {message} from {client_address}")
-
-        # Check if the request = identify the leader
         if message.startswith("identify_leader"):
             if self.role == 'leader':
                 response = "I am the leader"
             else:
-                # Redirect to the current leader if available
-                leader_host, leader_port = self.leader_address or ("unknown", "unknown")
-                response = f"Redirect to leader:{leader_host}:{leader_port}"
+                if self.leader_address:
+                    leader_host, leader_port = self.leader_address
+                    response = f"Redirect to leader:{leader_host}:{leader_port}"
+                else:
+                    response = "Leader unknown"
             self.sock.sendto(response.encode(), client_address)
-            return 
+            return
 
-        response = "Invalid request format"
-
-        try:
-            # Split the message into components for request type, client ID, and request ID
-            parts = message.split(":", 3)
-            request_type = parts[0]
-            client_id = parts[1]
-            request_id = parts[2]
-
-            # Handle append_file request separately due to additional information
-            if request_type == "append_file" and len(parts) == 4:
-                additional_info = urllib.parse.unquote(parts[3])
-                try:
-                    # Split additional_info to extract file_name and file_data
-                    file_name, file_data = additional_info.split(":", 1)
-                    response = self.append_to_file(client_id, file_name, file_data)
-                except ValueError:
-                    response = "Invalid append_file format"
-            else:
-                # Process other request types and update response accordingly
-                response = self.process_other_request_types(request_type, client_id, request_id)
-        except ValueError:
-            # This will be used if any parsing error occurs
-            response = "Invalid request format"
-
-        # Ensure response is sent back to the client
-        print(f"[DEBUG] Sending response to {client_id}: {response}")
-        self.sock.sendto(response.encode(), client_address)
-
-        
     def process_other_request_types(self, request_type, client_id, request_id): #other client commands to server for lock managing
         if request_type == "acquire_lock":
             return self.acquire_lock(client_id)

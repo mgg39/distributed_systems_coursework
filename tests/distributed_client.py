@@ -19,53 +19,68 @@ class DistributedClient:
         self.request_id += 1
         return str(self.request_id)
 
+    def find_leader(self):
+        unreachable_servers = set()
+        for address in self.replicas:
+            if address in unreachable_servers:
+                continue  # Skip known unreachable servers for this attempt
+            self.connection = RPCConnection(*address)
+            response = self.connection.rpc_send(f"identify_leader:{self.client_id}")
+            
+            if response == "I am the leader":
+                self.current_leader = address
+                return True
+            elif response.startswith("Redirect to leader"):
+                try:
+                    host, port = response.split(":")[2:]
+                    self.current_leader = (host, int(port))
+                    self.connection = RPCConnection(*self.current_leader)
+                    return True
+                except ValueError:
+                    continue
+            elif response.startswith("Timeout"):
+                unreachable_servers.add(address)  # Add server to temporary blacklist
+        self.current_leader = None
+        return False
+
     def send_message(self, message_type, additional_info=""):
-        # Ensure we are connected to the current leader
-        if not self.current_leader:
-            if not self.find_leader():
-                print(f"{self.client_id}: Unable to find leader.")
-                return "Leader not found"
-
-        # URL encode additional information for requests
-        additional_info_encoded = urllib.parse.quote(additional_info)
-        request_id = self.next_request_id()
-        if additional_info_encoded:
-            message = f"{message_type}:{self.client_id}:{request_id}:{additional_info_encoded}"
-        else:
-            message = f"{message_type}:{self.client_id}:{request_id}"
-
-        # Send the message to the leader and handle redirection
-        response = self.connection.rpc_send(message)
+        # Find leader if not set
+        if not self.current_leader and not self.find_leader():
+            return "Leader not found"
+        
+        # Send msg, retry on redirect
+        response = self.connection.rpc_send(f"{message_type}:{self.client_id}:{self.next_request_id()}:{urllib.parse.quote(additional_info)}")
         if response.startswith("Redirect to leader"):
-            # Update leader and retry
-            host, port = response.split(":")[2:]
-            self.current_leader = (host, int(port))
-            self.connection = RPCConnection(*self.current_leader)
-            print(f"{self.client_id}: Redirected to new leader at {self.current_leader}")
-            response = self.connection.rpc_send(message)  # Retry with the new leader
+            if not self.find_leader():  # Update leader if redirected
+                return "Leader redirect failed"
+            return self.send_message(message_type, additional_info)  # Retry msg to new leader
         return response
 
-    def acquire_lock(self, max_retries=5, base_interval=1):
+    def acquire_lock(self, max_retries=5, base_interval=0.5):  # shorter base interval
         retry_interval = base_interval
         for attempt in range(max_retries):
             response = self.send_message("acquire_lock")
-
             if response.startswith("grant lock"):
                 self.lock_acquired = True
                 _, lease_duration_str = response.split(":")
                 self.lease_duration = int(lease_duration_str)
-                print(f"{self.client_id}: Lock acquired with lease duration of {self.lease_duration} seconds.")
-                threading.Thread(target=self.send_heartbeat, daemon=True).start()
+                threading.Thread(target=self.start_lease_timer, daemon=True).start()
                 return True
             elif response == "Lock is currently held":
                 print(f"{self.client_id}: Lock is held, retrying...")
-            else:
-                print(f"{self.client_id}: Unexpected response or no response, retrying...")
-
             time.sleep(retry_interval)
-            retry_interval *= 2
-        print(f"{self.client_id}: Failed to acquire lock after {max_retries} attempts.")
+            retry_interval *= 2  # Still exponential but starts with shorter interval
         return False
+
+
+    def start_lease_timer(self):
+        expiration_time = time.time() + self.lease_duration
+        while time.time() < expiration_time and self.lock_acquired:
+            time.sleep(1)
+        if self.lock_acquired:
+            self.lock_acquired = False  # Mark lock as expired
+            print(f"{self.client_id}: Lock lease expired")
+
 
     def release_lock(self):
         if self.lock_acquired:
@@ -79,11 +94,13 @@ class DistributedClient:
             print(f"{self.client_id}: Cannot release lock - lock not held by this client.")
 
     def send_heartbeat(self):
-        # Send periodic heartbeat to keep lock alive based on lease duration
-        if self.lease_duration:
-            while self.lock_acquired:
-                self.send_message("heartbeat")
-                time.sleep(self.lease_duration / 2)  # Send heartbeat halfway through the lease
+        while self.lock_acquired:
+            response = self.send_message("heartbeat")
+            if response != "lease renewed":
+                print(f"{self.client_id}: Failed to renew lease, response: {response}")
+                self.lock_acquired = False  # Mark lock as lost
+                break
+            time.sleep(self.lease_duration / 3)
 
     def append_file(self, file_name, data):
         # Appends data to file if lock held
@@ -101,25 +118,6 @@ class DistributedClient:
         if self.connection:
             self.connection.close()
         print(f"{self.client_id}: Connection closed.")
-
-    def find_leader(self):
-        for address in self.replicas:
-            self.connection = RPCConnection(*address)
-            response = self.connection.rpc_send(f"identify_leader:{self.client_id}")
-
-            if response == "I am the leader":
-                print(f"[DEBUG] Leader identified at {address}")
-                self.current_leader = address
-                return True
-            elif response.startswith("Redirect to leader"):
-                # Extract leader's address if provided in the response
-                host, port = response.split(":")[2:]
-                self.current_leader = (host, int(port))
-                print(f"[DEBUG] Redirected to leader at {self.current_leader}")
-                self.connection = RPCConnection(*self.current_leader)
-                return True
-        return False
-
 
 """
 # Example usage

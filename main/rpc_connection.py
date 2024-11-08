@@ -9,32 +9,23 @@ class RPCConnection:
         self.retries = retries  # Max retries
         self.backoff = backoff  # Wait time btw retries
 
-    def rpc_send(self, message):
-        attempt = 0  # Track attempts
-        
-        while attempt <= self.retries:
-            try:
-                # Attempt to send msg
-                print(f"Attempt {attempt+1}: Sending '{message}' to {self.server_address}")
-                self.sock.sendto(message.encode(), self.server_address)
-
-                # Try to get response
-                data, _ = self.sock.recvfrom(1024)
-                return data.decode()
-
-            except socket.timeout:
-                print(f"Attempt {attempt+1}: Timeout, retrying...")
-                attempt += 1
-                if attempt > self.retries:
-                    return "Timeout: No response after retries"
-                time.sleep(self.backoff)  # Wait, then retry
-
-            except Exception as e:
-                print(f"Attempt {attempt+1}: Error - {e}")
-                attempt += 1
-                if attempt > self.retries:
-                    return f"Error after retries: {e}"
-                time.sleep(self.backoff)  # Wait, then retry
+def rpc_send(self, message):
+    attempt = 0
+    while attempt <= self.retries:
+        try:
+            self.sock.sendto(message.encode(), self.server_address)
+            data, _ = self.sock.recvfrom(1024)
+            return data.decode()
+        except socket.timeout:
+            attempt += 1
+            if attempt > self.retries:
+                return "Timeout: No response after retries"
+            time.sleep(self.backoff)
+        except Exception as e:
+            attempt += 1
+            if attempt > self.retries:
+                return f"Error after retries: {e}"
+            time.sleep(self.backoff)
 
     def close(self):
         if self.sock:
