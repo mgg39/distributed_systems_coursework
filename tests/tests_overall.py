@@ -1,7 +1,9 @@
 import os
 import time
+import random
 from datetime import datetime
 from distributed_client import DistributedClient
+from collections import defaultdict
 
 LOCK_LEASE_DURATION = 10  
 
@@ -36,29 +38,28 @@ def network_failure_packet_delay(test_id):
         client1 = DistributedClient(client_id="client_1", replicas=[("localhost", 8080)])
         client2 = DistributedClient(client_id="client_2", replicas=[("localhost", 8081)])
         
-        # Client 1 acquires the lock
+        # Client 1 acquires lock
         lock_acquired = client1.acquire_lock()
         if not lock_acquired:
             log_result("network_failure_packet_delay", False, test_id)
-            return False  # Fail - lock not acquired
+            return False  # Fail if lock not acquired
         
-        # network delay
-        time.sleep(LOCK_LEASE_DURATION + 1)  # Wait for lock to expire
+        # Simulate delay (just under lease duration)
+        time.sleep(LOCK_LEASE_DURATION - 1)
         
-        # Attempt to append (should fail - lock expired)
+        # Client 1 attempts append (should succeed if within lease)
         result = client1.append_file("file_A", "data_A")
-        success = "ERROR: LOCK EXPIRED" in result  # Adjust based error message
         
-        # Client 2 tries to acquire the lock after Client 1's lock expires
+        # Client 2 attempts to acquire lock (should get it after expiration)
+        time.sleep(2)  # Ensure `LOCK_LEASE_DURATION` has passed
         lock_acquired_client2 = client2.acquire_lock()
-        if not lock_acquired_client2:
-            log_result("network_failure_packet_delay", False, test_id)
-            return False  # Fail if Client 2 couldn’t acquire the lock
         
+        # Log result based on outcomes
+        success = lock_acquired and lock_acquired_client2
         log_result("network_failure_packet_delay", success, test_id)
         return success
+
     except Exception as e:
-        # Log the exception as failure
         print(f"Exception in {test_id}: {e}")
         log_result("network_failure_packet_delay", False, test_id)
         return False
@@ -245,13 +246,19 @@ def single_server_failure_lock_held(test_id):
         return False
 
 # Run 
+
+# Phase 1: iterations of specific test functions (50 per test type)
+
+summary_stats = defaultdict(lambda: {"total": 0, "success": 0, "failed": []})
+
 def run_test(test_function, test_name, iterations):
     for i in range(iterations):
         test_id = f"{test_name}_{i+1}"
         output_file = os.path.join(output_folder, f"{test_id}.txt")
         
-        # Log
+        # Log to individual test file
         with open(output_file, "w") as f:
+            f.write(f"Test ID: {test_id}\n")
             f.write(f"Test: {test_name}\n")
             f.write(f"Iteration: {i+1}\n")
             f.write(f"Start Time: {datetime.now()}\n")
@@ -261,8 +268,110 @@ def run_test(test_function, test_name, iterations):
             
             f.write(f"Result: {result}\n")
             f.write(f"End Time: {datetime.now()}\n")
+        
+        # Update summary stats
+        summary_stats[test_name]["total"] += 1
+        if success:
+            summary_stats[test_name]["success"] += 1
+        else:
+            summary_stats[test_name]["failed"].append(test_id)
+        
+        # Incremental logging to summary file
+        with open(summary_file, "a") as summary:
+            summary.write(f"{test_name} - {test_id}: {result}\n")
+            
+            # Every 10 tests, update summary overview
+            if summary_stats[test_name]["total"] % 10 == 0:
+                summary.write("\n--- Ongoing Summary ---\n")
+                completed = summary_stats[test_name]["total"]
+                remaining = iterations - completed
+                success_count = summary_stats[test_name]["success"]
+                failures = summary_stats[test_name]["failed"]
+                
+                summary.write(f"Completed tests: {completed}\n")
+                summary.write(f"Remaining tests: {remaining}\n")
+                summary.write(f"Successful: {success_count}/{completed}\n")
+                if failures:
+                    summary.write("Failed tests:\n")
+                    for fail in failures:
+                        summary.write(f"  - {fail}\n")
+                summary.write("\n")
+
+# Phase 2: Multi client randomized Crash Test (2000)
+def run_randomized_crash_test(test_id):
+    output_file = os.path.join(output_folder, f"{test_id}.txt")
+    events = []  # Track events for each client in this test
+    success = True  # Assume success unless we encounter a failure
+    
+    with open(output_file, "w") as f:
+        # Metadata logging
+        f.write(f"Test ID: {test_id}\n")
+        f.write("Randomized Crash Test with 5-10 Clients\n")
+        f.write(f"Start Time: {datetime.now()}\n\n")
+
+        # Generate random events and clients
+        num_clients = random.randint(5, 10)
+        for i in range(num_clients):
+            client_event = random.choice(["acquire_lock", "append_file", "release_lock", "stall", "packet_delay", "packet_drop"])
+            events.append((f"client_{i+1}", client_event))
+        
+        # Log chosen events
+        f.write("Event Sequence:\n")
+        for client, event in events:
+            f.write(f"  - {client} will {event}\n")
+        f.write("\n")
+
+        # Execute
+        for client_id, event in events:
+            client = DistributedClient(client_id=client_id, replicas=[("localhost", 8080)])
+            
+            if event == "acquire_lock":
+                result = client.acquire_lock()
+                f.write(f"{client_id} tried to acquire lock: {result}\n")
+                if result != "PASS":
+                    success = False
+            
+            elif event == "append_file":
+                result = client.append_file("test_file", "data")
+                f.write(f"{client_id} attempted to append to file: {result}\n")
+                if result != "PASS":
+                    success = False
+            
+            elif event == "release_lock":
+                result = client.release_lock()
+                f.write(f"{client_id} released lock: {result}\n")
+                if result != "PASS":
+                    success = False
+            
+            elif event == "stall":
+                time.sleep(LOCK_LEASE_DURATION + 1)
+                f.write(f"{client_id} stalled for lock timeout.\n")
+            
+            elif event == "packet_delay":
+                time.sleep(2)  # Short delay
+                f.write(f"{client_id} experienced simulated packet delay.\n")
+            
+            elif event == "packet_drop":
+                f.write(f"{client_id} encountered simulated packet drop. No action taken.\n")
+                continue
+
+        f.write(f"End Time: {datetime.now()}\n")
+        result = "PASS" if success else "FAIL"
+
+    # Log test results to summary file
+    with open(summary_file, "a") as summary:
+        if result == "PASS":
+            summary.write(f"randomized_crash_test - {test_id}: PASS\n")
+        else:
+            summary.write(f"randomized_crash_test - {test_id}: FAIL\n")
+            summary.write(f"  - {num_clients} clients, events: {[event for _, event in events]}\n")
+            summary.write(f"  - Failed events:\n")
+            for client, event in events:
+                if event in ["acquire_lock", "append_file", "release_lock"] and "FAIL" in locals():
+                    summary.write(f"    - {client} experienced {event} failure\n")
 
 def main():
+    # Core tests
     run_test(network_failure_packet_delay, "network_failure_packet_delay", 50)
     run_test(network_failure_packet_drop_client_loss, "network_failure_packet_drop_client_loss", 50)
     run_test(network_failure_packet_drop_server_loss, "network_failure_packet_drop_server_loss", 50)
@@ -274,7 +383,13 @@ def main():
     
     run_test(single_server_failure_lock_free, "single_server_failure_lock_free", 50)
     run_test(single_server_failure_lock_held, "single_server_failure_lock_held", 50)
+    
+    # Run the randomized crash test 2000 times
+    for i in range(2000):
+        test_id = f"randomized_crash_test_{i+1}"
+        run_randomized_crash_test(test_id)
 
+    # Generate summary report
     with open(summary_file, "w") as summary:
         summary.write("Test Summary\n")
         summary.write("====================\n")

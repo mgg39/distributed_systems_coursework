@@ -1,0 +1,5 @@
+Test: network_failure_packet_delay
+Iteration: 2
+Start Time: 2024-11-08 10:40:20.775094
+Result: FAIL
+End Time: 2024-11-08 10:42:06.838540
