@@ -1,4 +1,12 @@
 Test Summary
 ====================
-Phase 1: Core Tests
---------------------
+Test Summary
+====================
+network_failure_packet_delay:
+  Total Runs: 2
+  Successes: 0
+  Failures: 2
+  Failed Test IDs:
+    - network_failure_packet_delay_1
+    - network_failure_packet_delay_1
+

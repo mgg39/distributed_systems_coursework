@@ -348,32 +348,12 @@ def main():
         summary.write("Test Summary\n")
         summary.write("====================\n")
         
-        # Phase 1: Core Tests
-        summary.write("Phase 1: Core Tests\n")
-        summary.write("--------------------\n")
-
-    # Define each test name and function to run in Phase 1
-    tests = [
-        (network_failure_packet_delay, "network_failure_packet_delay", 1),
-        """
-        (network_failure_packet_drop_client_loss, "network_failure_packet_drop_client_loss", 1),
-        (network_failure_packet_drop_server_loss, "network_failure_packet_drop_server_loss", 1),
-        (network_failure_duplicated_packets, "network_failure_duplicated_packets", 1),
-        (network_failure_combined_failures, "network_failure_combined_failures", 1),
-        (client_failure_stall_before_edit, "client_failure_stall_before_edit", 1),
-        (client_failure_stall_after_edit, "client_failure_stall_after_edit", 1),
-        (single_server_failure_lock_free, "single_server_failure_lock_free", 1),
-        (single_server_failure_lock_held, "single_server_failure_lock_held", 1)
-        """
-    ]
-    
-    # Run each test with redirected stdout to capture all outputs
-    for test_func, test_name, iterations in tests:
+        # Run just the first test for verification
+        test_func, test_name, iterations = network_failure_packet_delay, "network_failure_packet_delay", 1
         for i in range(iterations):
             test_id = f"{test_name}_{i+1}"
             output_file = os.path.join(output_folder, f"{test_id}.txt")
             
-            # Redirect all stdout to the test-specific output file
             with open(output_file, "w") as f:
                 with contextlib.redirect_stdout(f):
                     print(f"Test ID: {test_id}")
@@ -390,18 +370,8 @@ def main():
                     
                     # Log result in summary_stats
                     log_result(test_name, success, test_id)
-                    
-    """    
-    # Phase 2: Randomized crash tests
-    with open(summary_file, "a") as summary:
-        summary.write("\nPhase 2: Randomized Crash Tests\n")
-        summary.write("-------------------------------\n")
-
-    for i in range(2000):
-        test_id = f"randomized_crash_test_{i+1}"
-        run_randomized_crash_test(test_id)
-    """
-    # Final summary report at end
+    
+    # Report Summary
     with open(summary_file, "a") as summary:
         summary.write("Test Summary\n")
         summary.write("====================\n")
@@ -418,4 +388,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

@@ -20,6 +20,7 @@ for i in range(NUM_FILES):
 
 class LockManagerServer:
     def __init__(self, host='localhost', port=8080, server_id=0, peers=[]):
+
         self.server_address = (host, port)
         self.server_id = server_id  # Unique ID server
         self.peers = peers  # List of (host, port) tuples for peer servers
@@ -39,6 +40,14 @@ class LockManagerServer:
         self.current_lock_holder = None
         self.lock_expiration_time = None  # Stores when the lock should expire
         self.request_history = defaultdict(dict)  # Stores each client's request history
+
+        # Socket for client requests
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.bind(self.server_address)
+        
+        # New socket for Raft protocol messages
+        self.raft_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.raft_sock.bind((host, port + 1))  # Bind to a different port
 
         # Load any existing server state (for fault tolerance)
         self.load_state()
@@ -128,12 +137,20 @@ class LockManagerServer:
                     self.lock_expiration_time = None
                     self.save_state()  # Save state after lock expiration
             time.sleep(1)
-        
+    
     def handle_request(self, data, client_address):
         message = data.decode()
+        print(f"[DEBUG] handle_request received message: {message} from {client_address}")
+
+        if message == "ping":
+            print("[DEBUG] handle_request responding to ping")
+            self.sock.sendto("pong".encode(), client_address)
+            return
+
         if message.startswith("identify_leader"):
             if self.role == 'leader':
                 response = "I am the leader"
+                print("[DEBUG] Server responding as leader")
             else:
                 if self.leader_address:
                     leader_host, leader_port = self.leader_address
@@ -141,7 +158,53 @@ class LockManagerServer:
                 else:
                     response = "Leader unknown"
             self.sock.sendto(response.encode(), client_address)
+            print(f"[DEBUG] Sent identify_leader response: {response}")
             return
+
+    def handle_messages(self):
+        # Use raft_sock for handling Raft protocol messages
+        self.raft_sock.settimeout(1)  # Set a timeout to avoid blocking
+        while True:
+            try:
+                data, addr = self.raft_sock.recvfrom(1024)
+                message = data.decode()
+                print(f"[DEBUG] handle_messages received: {message} from {addr}")
+                parts = message.split(":")
+
+                # Process different message types
+                if parts[0] == "request_vote":
+                    term, candidate_id = int(parts[1]), int(parts[2])
+                    self.process_vote_request(term, candidate_id, addr)
+                elif parts[0] == "heartbeat":
+                    # Distinguish Raft heartbeats from client heartbeats
+                    if parts[1].isdigit() and parts[2].isdigit():
+                        self.process_heartbeat(int(parts[1]), int(parts[2]))
+                    else:
+                        client_id = parts[1]
+                        self.renew_lease(client_id)
+                elif parts[0] == "append_entry":
+                    term = int(parts[1])
+                    lock_holder = parts[2] if parts[2] != "None" else None
+                    self.handle_append_entry(term, lock_holder)
+                else:
+                    print(f"[DEBUG] Received unknown message type: {parts[0]} from {addr}")
+
+            except socket.timeout:
+                print("[DEBUG] handle_messages timeout, continuing")
+                continue
+            except Exception as e:
+                print(f"[DEBUG] Error in handle_messages: {e}")
+                continue
+
+            if message.startswith("identify_leader"):
+                if self.role == 'leader':
+                    response = "I am the leader"
+                    print("[DEBUG] Server is responding as leader.")
+                else:
+                    response = f"Redirect to leader:{self.leader_address[0]}:{self.leader_address[1]}" if self.leader_address else "Leader unknown"
+                    print(f"[DEBUG] Server redirecting to leader: {response}")
+                self.sock.sendto(response.encode(), client_address)
+                return
 
     def process_other_request_types(self, request_type, client_id, request_id): #other client commands to server for lock managing
         if request_type == "acquire_lock":
@@ -209,24 +272,22 @@ class LockManagerServer:
         self.role = 'candidate'
         self.term += 1
         self.voted_for = self.server_id
-        votes = 1  # Self-vote
+        votes = 1
         print(f"[DEBUG] Server {self.server_id} starting election for term {self.term}")
 
-        # Request votes from each peer
         for peer in self.peers:
             response = self.request_vote(peer, self.term, self.server_id)
             if response == "vote_granted":
                 votes += 1
 
-        # Check if we received majority votes
         if votes > len(self.peers) // 2:
-            print(f"[DEBUG] Server {self.server_id} became the leader for term {self.term}")
             self.role = 'leader'
-            self.leader_address = self.server_address  # Set itself as the leader
-            self.send_heartbeats()  # Start heartbeats as leader
+            self.leader_address = self.server_address
+            print(f"[DEBUG] Server {self.server_id} became the leader for term {self.term}")
+            self.send_heartbeats()
         else:
-            # Revert to follower if election fails
             self.role = 'follower'
+            print(f"[DEBUG] Server {self.server_id} reverted to follower after election.")
 
     def request_vote(self, peer, term, candidate_id):
         # Send vote request to a peer (pseudo-code, replace with actual message handling)
@@ -241,32 +302,6 @@ class LockManagerServer:
             for peer in self.peers:
                 self.sock.sendto(message.encode(), peer)
             time.sleep(2)  # Send heartbeat every 2 seconds
-
-    def handle_messages(self):
-        # Handle incoming messages for Raft & lock requests
-        while True:
-            data, addr = self.sock.recvfrom(1024)
-            message = data.decode()
-            parts = message.split(":")
-
-            if parts[0] == "request_vote":
-                # Handle incoming vote request
-                term, candidate_id = int(parts[1]), int(parts[2])
-                self.process_vote_request(term, candidate_id, addr)
-            elif parts[0] == "heartbeat":
-                # Distinguish between Raft heartbeats & client heartbeats
-                if parts[1].isdigit() and parts[2].isdigit():  # Raft heartbeat
-                    self.process_heartbeat(int(parts[1]), int(parts[2]))
-                else:  # Client heartbeat
-                    client_id = parts[1]
-                    self.renew_lease(client_id)
-            elif parts[0] == "append_entry":
-                # Process replication (append_entry) requests
-                term = int(parts[1])
-                lock_holder = parts[2] if parts[2] != "None" else None
-                self.handle_append_entry(term, lock_holder)
-            else:
-                print(f"[DEBUG] Received unknown message type: {parts[0]} from {addr}")
 
     def process_vote_request(self, term, candidate_id, addr):
         # Check term and decide to vote for candidate
@@ -291,9 +326,6 @@ class LockManagerServer:
             self.current_lock_holder = lock_holder
             self.last_heartbeat = time.time()  # Reset election timer
 
-
-        
-        
 if __name__ == "__main__":
     server = LockManagerServer()
     server.start()
