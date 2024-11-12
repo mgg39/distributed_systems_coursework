@@ -1,0 +1,34 @@
+Test Summary
+====================
+network_failure_packet_delay:
+  Total Runs: 20
+  Successes: 20
+  Failures: 0
+
+network_failure_packet_drop_server_loss:
+  Total Runs: 20
+  Successes: 20
+  Failures: 0
+
+client_failure_stall_before_edit:
+  Total Runs: 20
+  Successes: 20
+  Failures: 0
+
+client_failure_stall_after_edit:
+  Total Runs: 20
+  Successes: 20
+  Failures: 0
+
+single_server_failure_lock_free:
+  Total Runs: 20
+  Successes: 20
+  Failures: 0
+
+single_server_failure_lock_held:
+  Total Runs: 20
+  Successes: 19
+  Failures: 1
+  Failed Test IDs:
+    - single_server_failure_lock_held_1
+

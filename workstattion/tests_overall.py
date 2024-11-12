@@ -410,10 +410,10 @@ def main():
         test_functions = [
             (network_failure_packet_delay, "network_failure_packet_delay"), #simulated: 100ms delay tc
             (network_failure_packet_drop_server_loss, "network_failure_packet_drop"), #simulated: 1% loss tc
-            (client_failure_stall_before_edit, "client_failure_stall_before_edit"), #TODO: simulate artificial delays - time.sleep(5) before edit
-            (client_failure_stall_after_edit, "client_failure_stall_after_edit"), #TODO: simulate artificial delays - time.sleep(5) after edit
-            (single_server_failure_lock_free, "single_server_failure_lock_free"), #TODO: terminating the server during the test
-            (single_server_failure_lock_held, "single_server_failure_lock_held"), #TODO: terminating the server during the test
+            (client_failure_stall_before_edit, "client_failure_stall_before_edit"), 
+            (client_failure_stall_after_edit, "client_failure_stall_after_edit"), 
+            (single_server_failure_lock_free, "single_server_failure_lock_free"), 
+            (single_server_failure_lock_held, "single_server_failure_lock_held"), 
         ]
         for test_func, test_name in test_functions:
             run_test(test_func, test_name, 20)
