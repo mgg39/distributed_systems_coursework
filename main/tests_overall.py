@@ -40,7 +40,7 @@ def log_result(test_name, success, test_id):
 def network_failure_packet_delay(test_id, f):
     try:
         client1 = DistributedClient(client_id="client_1", replicas=[("localhost", 8080)])
-        client2 = DistributedClient(client_id="client_2", replicas=[("localhost", 8081)])
+        client2 = DistributedClient(client_id="client_2", replicas=[("localhost", 8080)])
         
         log_to_file_and_console(f"{test_id} - Client 1 attempting to acquire lock", f)
         lock_acquired = client1.acquire_lock()
@@ -49,14 +49,31 @@ def network_failure_packet_delay(test_id, f):
             log_result("network_failure_packet_delay", False, test_id)
             return False
         
-        time.sleep(LOCK_LEASE_DURATION - 1)
-        result = client1.append_file("file_A", "data_A")
+        # Client 1 writes "A" into file_1
+        result_client1 = client1.append_file("file_1", "A")
+        log_to_file_and_console(f"{test_id} - Client 1 appended 'A' to file_1 with result: {result_client1}", f)
         
+        # Release the lock for client 2 to take over
+        client1.release_lock()
+        log_to_file_and_console(f"{test_id} - Client 1 released the lock", f)
+
+        # Allow time for lock release to propagate
         time.sleep(2)
+
+        # Client 2 attempts to acquire the lock
+        log_to_file_and_console(f"{test_id} - Client 2 attempting to acquire lock", f)
         lock_acquired_client2 = client2.acquire_lock()
-        
-        success = lock_acquired and lock_acquired_client2
-        log_to_file_and_console(f"{test_id} - Test result: {'PASS' if success else 'FAIL'}", f)
+        if lock_acquired_client2:
+            log_to_file_and_console(f"{test_id} - Client 2 acquired the lock", f)
+            result_client2 = client2.append_file("file_1", "B")
+            log_to_file_and_console(f"{test_id} - Client 2 appended 'B' to file_1 with result: {result_client2}", f)
+        else:
+            log_to_file_and_console(f"{test_id} - Client 2 failed to acquire lock", f)
+            result_client2 = "failed"
+
+        # Final success check: both clients must have succeeded in appending
+        success = result_client1 == "append success" and result_client2 == "append success"
+        log_to_file_and_console(f"{test_id} - Test result evaluated: {'PASS' if success else 'FAIL'}", f)
         log_result("network_failure_packet_delay", success, test_id)
         return success
 
@@ -68,15 +85,15 @@ def network_failure_packet_delay(test_id, f):
 def network_failure_packet_drop_server_loss(test_id, f):
     try:
         client1 = DistributedClient(client_id="client_1", replicas=[("localhost", 8080)])
-        client2 = DistributedClient(client_id="client_2", replicas=[("localhost", 8081)])
+        client2 = DistributedClient(client_id="client_2", replicas=[("localhost", 8080)])
         
         log_to_file_and_console(f"{test_id} - Simulating server packet loss for client 1 lock acquisition", f)
         client1.acquire_lock()
-        result = client1.append_file("file_A", "data_A")
+        result = client1.append_file("file_1", "A")  # Client 1 writes "A" into file_1
         
         client1.release_lock()
         lock_acquired_client2 = client2.acquire_lock()
-        result = client2.append_file("file_B", "data_B")
+        result = client2.append_file("file_1", "B")  # Client 2 writes "B" into file_1
         
         success = result == "append success"
         log_to_file_and_console(f"{test_id} - Test result: {'PASS' if success else 'FAIL'}", f)
@@ -90,15 +107,15 @@ def network_failure_packet_drop_server_loss(test_id, f):
 def network_failure_packet_drop_client_loss(test_id, f):
     try:
         client1 = DistributedClient(client_id="client_1", replicas=[("localhost", 8080)])
-        client2 = DistributedClient(client_id="client_2", replicas=[("localhost", 8081)])
+        client2 = DistributedClient(client_id="client_2", replicas=[("localhost", 8080)])
         
         log_to_file_and_console(f"{test_id} - Simulating client 1 packet loss", f)
         lock_acquired_client2 = client2.acquire_lock()
-        result = client2.append_file("file_B", "data_B")
+        result = client2.append_file("file_1", "B")  # Client 2 writes "B" into file_1
         
         client2.release_lock()
         lock_acquired_client1 = client1.acquire_lock()
-        result = client1.append_file("file_A", "data_A")
+        result = client1.append_file("file_1", "A")  # Client 1 writes "A" into file_1
         
         success = result == "append success"
         log_to_file_and_console(f"{test_id} - Test result: {'PASS' if success else 'FAIL'}", f)
@@ -112,18 +129,18 @@ def network_failure_packet_drop_client_loss(test_id, f):
 def network_failure_duplicated_packets(test_id, f):
     try:
         client1 = DistributedClient(client_id="client_1", replicas=[("localhost", 8080)])
-        client2 = DistributedClient(client_id="client_2", replicas=[("localhost", 8081)])
+        client2 = DistributedClient(client_id="client_2", replicas=[("localhost", 8080)])
         
         log_to_file_and_console(f"{test_id} - Client 1 acquiring lock and appending", f)
         client1.acquire_lock()
-        client1.append_file("file_A", "data_A")
+        client1.append_file("file_1", "A")  # Client 1 writes "A" into file_1
         
         client1.release_lock()
         log_to_file_and_console(f"{test_id} - Simulating duplicated release", f)
         client1.release_lock() 
         
         lock_acquired_client2 = client2.acquire_lock()
-        result = client2.append_file("file_B", "data_B")
+        result = client2.append_file("file_1", "B")  # Client 2 writes "B" into file_1
         
         success = result == "append success"
         log_to_file_and_console(f"{test_id} - Test result: {'PASS' if success else 'FAIL'}", f)
@@ -137,17 +154,15 @@ def network_failure_duplicated_packets(test_id, f):
 def network_failure_combined_failures(test_id, f):
     try:
         client1 = DistributedClient(client_id="client_1", replicas=[("localhost", 8080)])
-        client2 = DistributedClient(client_id="client_2", replicas=[("localhost", 8081)])
+        client2 = DistributedClient(client_id="client_2", replicas=[("localhost", 8080)])
         
         log_to_file_and_console(f"{test_id} - Client 1 acquiring lock and appending", f)
         client1.acquire_lock()
-        client1.append_file("file_1", "data_1")
-        
-        client1.append_file("file_A", "data_A")
+        client1.append_file("file_1", "A")  # Client 1 writes "A" into file_1
         
         client1.release_lock()
         lock_acquired_client2 = client2.acquire_lock()
-        result = client2.append_file("file_B", "data_B")
+        result = client2.append_file("file_1", "B")  # Client 2 writes "B" into file_1
         
         success = result == "append success"
         log_to_file_and_console(f"{test_id} - Test result: {'PASS' if success else 'FAIL'}", f)
@@ -163,13 +178,13 @@ def network_failure_combined_failures(test_id, f):
 def client_failure_stall_before_edit(test_id, f):
     try:
         client1 = DistributedClient(client_id="client_1", replicas=[("localhost", 8080)])
-        client2 = DistributedClient(client_id="client_2", replicas=[("localhost", 8081)])
+        client2 = DistributedClient(client_id="client_2", replicas=[("localhost", 8080)])
         
         client1.acquire_lock()
         time.sleep(LOCK_LEASE_DURATION + 1)
         
         lock_acquired_client2 = client2.acquire_lock()
-        result = client2.append_file("file_B", "data_B")
+        result = client2.append_file("file_1", "B")  # Client 2 writes "B" into file_1
         
         success = result == "append success"
         log_to_file_and_console(f"{test_id} - Test result: {'PASS' if success else 'FAIL'}", f)
@@ -183,14 +198,14 @@ def client_failure_stall_before_edit(test_id, f):
 def client_failure_stall_after_edit(test_id, f):
     try:
         client1 = DistributedClient(client_id="client_1", replicas=[("localhost", 8080)])
-        client2 = DistributedClient(client_id="client_2", replicas=[("localhost", 8081)])
+        client2 = DistributedClient(client_id="client_2", replicas=[("localhost", 8080)])
         
         client1.acquire_lock()
-        client1.append_file("file_A", "data_A")
+        client1.append_file("file_1", "A")  # Client 1 writes "A" into file_1
         time.sleep(LOCK_LEASE_DURATION + 1)
         
         lock_acquired_client2 = client2.acquire_lock()
-        result = client2.append_file("file_B", "data_B")
+        result = client2.append_file("file_1", "B")  # Client 2 writes "B" into file_1
         
         success = result == "append success"
         log_to_file_and_console(f"{test_id} - Test result: {'PASS' if success else 'FAIL'}", f)
@@ -208,13 +223,13 @@ def single_server_failure_lock_free(test_id, f):
         client1 = DistributedClient(client_id="client_1", replicas=[("localhost", 8080)])
         
         client1.acquire_lock()
-        client1.append_file("file_A", "data_A")
+        client1.append_file("file_1", "A")  # Client 1 writes "A" into file_1
         
         client1.release_lock()
         time.sleep(2)
         
         client1.acquire_lock()
-        result = client1.append_file("file_1", "data_1")
+        result = client1.append_file("file_1", "A")  # Client 1 writes "A" again into file_1
         
         success = result == "append success"
         log_to_file_and_console(f"{test_id} - Test result: {'PASS' if success else 'FAIL'}", f)
@@ -228,17 +243,17 @@ def single_server_failure_lock_free(test_id, f):
 def single_server_failure_lock_held(test_id, f):
     try:
         client1 = DistributedClient(client_id="client_1", replicas=[("localhost", 8080)])
-        client2 = DistributedClient(client_id="client_2", replicas=[("localhost", 8081)])
+        client2 = DistributedClient(client_id="client_2", replicas=[("localhost", 8080)])
         
         client1.acquire_lock()
-        client1.append_file("file_A", "data_A")
+        client1.append_file("file_1", "A")  # Client 1 writes "A" into file_1
         client1.release_lock()
         
         lock_acquired_client2 = client2.acquire_lock()
-        client2.append_file("file_B", "data_B")
+        client2.append_file("file_1", "B")  # Client 2 writes "B" into file_1
         time.sleep(2)
         
-        result = client2.append_file("file_B", "data_B")
+        result = client2.append_file("file_1", "B")  # Client 2 writes "B" again into file_1
         
         success = result == "append success"
         log_to_file_and_console(f"{test_id} - Test result: {'PASS' if success else 'FAIL'}", f)
@@ -248,7 +263,7 @@ def single_server_failure_lock_held(test_id, f):
         log_to_file_and_console(f"{test_id} - Exception: {e}", f)
         log_result("single_server_failure_lock_held", False, test_id)
         return False
-    
+
 # Run 
 
 # Phase 1: iterations of specific test functions (50 per test type)
@@ -257,7 +272,7 @@ summary_stats = defaultdict(lambda: {"total": 0, "success": 0, "failed": []})
 
 def run_test(test_function, test_name, iterations):
     for i in range(iterations):
-        test_id = f"{test_name}_{i+1}"
+        test_id = f"{test_name}_{i+1}"  # Unique test ID per iteration
         output_file = os.path.join(output_folder, f"{test_id}.txt")
         
         with open(output_file, "w") as f:

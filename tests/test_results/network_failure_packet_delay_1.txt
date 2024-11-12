@@ -1,51 +1,25 @@
 Test ID: network_failure_packet_delay_1
 Test: network_failure_packet_delay
 Iteration: 1
-Start Time: 2024-11-11 18:19:57.677510
+Start Time: 2024-11-12 11:18:37.378649
 network_failure_packet_delay_1 - Client 1 attempting to acquire lock
 network_failure_packet_delay_1 - Client 1 attempting to acquire lock
+client_1 - Attempting to find leader
 Attempt 1: Sending 'identify_leader:client_1' to ('localhost', 8080)
-Attempt 1: Sending 'acquire_lock:client_1:1:' to ('localhost', 8080)
-Attempt 1: Timeout, retrying...
-Attempt 2: Sending 'acquire_lock:client_1:1:' to ('localhost', 8080)
-Attempt 2: Timeout, retrying...
-Attempt 3: Sending 'acquire_lock:client_1:1:' to ('localhost', 8080)
-Attempt 3: Timeout, retrying...
-Attempt 4: Sending 'acquire_lock:client_1:1:' to ('localhost', 8080)
-Attempt 4: Timeout, retrying...
-Attempt 1: Sending 'acquire_lock:client_1:2:' to ('localhost', 8080)
-Attempt 1: Timeout, retrying...
-Attempt 2: Sending 'acquire_lock:client_1:2:' to ('localhost', 8080)
-Attempt 2: Timeout, retrying...
-Attempt 3: Sending 'acquire_lock:client_1:2:' to ('localhost', 8080)
-Attempt 3: Timeout, retrying...
-Attempt 4: Sending 'acquire_lock:client_1:2:' to ('localhost', 8080)
-Attempt 4: Timeout, retrying...
-Attempt 1: Sending 'acquire_lock:client_1:3:' to ('localhost', 8080)
-Attempt 1: Timeout, retrying...
-Attempt 2: Sending 'acquire_lock:client_1:3:' to ('localhost', 8080)
-Attempt 2: Timeout, retrying...
-Attempt 3: Sending 'acquire_lock:client_1:3:' to ('localhost', 8080)
-Attempt 3: Timeout, retrying...
-Attempt 4: Sending 'acquire_lock:client_1:3:' to ('localhost', 8080)
-Attempt 4: Timeout, retrying...
-Attempt 1: Sending 'acquire_lock:client_1:4:' to ('localhost', 8080)
-Attempt 1: Timeout, retrying...
-Attempt 2: Sending 'acquire_lock:client_1:4:' to ('localhost', 8080)
-Attempt 2: Timeout, retrying...
-Attempt 3: Sending 'acquire_lock:client_1:4:' to ('localhost', 8080)
-Attempt 3: Timeout, retrying...
-Attempt 4: Sending 'acquire_lock:client_1:4:' to ('localhost', 8080)
-Attempt 4: Timeout, retrying...
-Attempt 1: Sending 'acquire_lock:client_1:5:' to ('localhost', 8080)
-Attempt 1: Timeout, retrying...
-Attempt 2: Sending 'acquire_lock:client_1:5:' to ('localhost', 8080)
-Attempt 2: Timeout, retrying...
-Attempt 3: Sending 'acquire_lock:client_1:5:' to ('localhost', 8080)
-Attempt 3: Timeout, retrying...
-Attempt 4: Sending 'acquire_lock:client_1:5:' to ('localhost', 8080)
-Attempt 4: Timeout, retrying...
+client_1 - Received response: Leader unknown
+client_1 - Attempting to find leader
+Attempt 1: Sending 'identify_leader:client_1' to ('localhost', 8080)
+client_1 - Received response: Leader unknown
+client_1 - Attempting to find leader
+Attempt 1: Sending 'identify_leader:client_1' to ('localhost', 8080)
+client_1 - Received response: Leader unknown
+client_1 - Attempting to find leader
+Attempt 1: Sending 'identify_leader:client_1' to ('localhost', 8080)
+client_1 - Received response: Leader unknown
+client_1 - Attempting to find leader
+Attempt 1: Sending 'identify_leader:client_1' to ('localhost', 8080)
+client_1 - Received response: Leader unknown
 network_failure_packet_delay_1 - Client 1 failed to acquire lock
 network_failure_packet_delay_1 - Client 1 failed to acquire lock
 Result: FAIL
-End Time: 2024-11-11 18:22:23.287438
+End Time: 2024-11-12 11:18:52.884755

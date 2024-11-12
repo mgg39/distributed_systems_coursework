@@ -28,7 +28,7 @@ class LockManagerServer:
         self.voted_for = None  # Candidate ID that received vote in current term
         self.role = 'follower'  # Start as a follower
         self.leader_address = None  # leader’s address tracking
-        self.election_timeout = random.uniform(5, 10)  # Randomized timeout for leader election
+        self.election_timeout = random.uniform(1, 2)  # Randomized timeout for leader election #CHANGED
         self.last_heartbeat = time.time()  # Track last heartbeat for election timeout
 
         # Initialize UDP socket
@@ -63,8 +63,8 @@ class LockManagerServer:
             data, client_address = self.sock.recvfrom(1024)
             threading.Thread(target=self.handle_request, args=(data, client_address)).start()
 
-    # Lock state replication
     def acquire_lock(self, client_id):
+        print(f"[DEBUG] acquire_lock invoked by {client_id}, role: {self.role}")
         if self.role == 'leader':
             with self.lock:
                 current_time = time.time()
@@ -72,13 +72,13 @@ class LockManagerServer:
                     self.current_lock_holder = client_id
                     self.lock_expiration_time = current_time + LOCK_LEASE_DURATION
                     self.save_state()
-                    for peer in self.peers:
-                        self.sock.sendto(f"append_entry:{self.term}:{client_id}".encode(), peer)
+                    print(f"[DEBUG] Lock granted to {client_id} with lease duration {LOCK_LEASE_DURATION}")
                     return f"grant lock:{LOCK_LEASE_DURATION}"
                 else:
-                    print(f"Lock currently held by {self.current_lock_holder}, cannot grant to {client_id}")
+                    print(f"[DEBUG] Lock currently held by {self.current_lock_holder}, cannot grant to {client_id}")
                     return "Lock is currently held"
         else:
+            print(f"[DEBUG] Redirecting to leader as role is not leader")
             return "Redirect to leader"
 
     def release_lock(self, client_id):
@@ -110,8 +110,8 @@ class LockManagerServer:
                 file_path = os.path.join(FILES_DIR, file_name)
             
                 # Debugging
-                #print(f"[DEBUG] Client {client_id} holds the lock and is attempting to append to {file_path}.")
-                #print(f"[DEBUG] Data to append: '{data}'")
+                print(f"[DEBUG] Client {client_id} holds the lock and is attempting to append to {file_path}.")
+                print(f"[DEBUG] Data to append: '{data}'")
                 
                 # Check if file exists before writing
                 if os.path.exists(file_path):
@@ -142,10 +142,43 @@ class LockManagerServer:
         message = data.decode()
         print(f"[DEBUG] handle_request received message: {message} from {client_address}")
 
+        if message.startswith("acquire_lock"):
+            client_id = message.split(":")[1]
+            response = self.acquire_lock(client_id)
+            self.sock.sendto(response.encode(), client_address)
+            print(f"[DEBUG] Sent acquire_lock response: {response}")
+            return
+        
+        elif message.startswith("release_lock"):
+            client_id = message.split(":")[1]
+            response = self.release_lock(client_id)
+            self.sock.sendto(response.encode(), client_address)
+            print(f"[DEBUG] Sent release_lock response: {response}")
+            return
+
+        elif message.startswith("append_file"):
+            client_id = message.split(":")[1]
+            file_info = urllib.parse.unquote(message.split(":", 3)[3])
+            file_name, file_data = file_info.split(":")
+            response = self.append_to_file(client_id, file_name, file_data)
+            self.sock.sendto(response.encode(), client_address)
+            print(f"[DEBUG] Sent append_file response: {response}")
+            return
+
+        # DEBUGGING ---------------------------------------------------------------
+        if message.startswith("acquire_lock"):
+            client_id = message.split(":")[1]
+            response = self.acquire_lock(client_id)
+            self.sock.sendto(response.encode(), client_address)  # Ensure response is sent back
+            print(f"[DEBUG] Sent acquire_lock response: {response}")
+            return
+
         if message == "ping":
             print("[DEBUG] handle_request responding to ping")
             self.sock.sendto("pong".encode(), client_address)
             return
+        
+        # DEBUGGING ---------------------------------------------------------------
 
         if message.startswith("identify_leader"):
             if self.role == 'leader':
@@ -162,8 +195,7 @@ class LockManagerServer:
             return
 
     def handle_messages(self):
-        # Use raft_sock for handling Raft protocol messages
-        self.raft_sock.settimeout(1)  # Set a timeout to avoid blocking
+        self.raft_sock.settimeout(1)
         while True:
             try:
                 data, addr = self.raft_sock.recvfrom(1024)
@@ -171,23 +203,17 @@ class LockManagerServer:
                 print(f"[DEBUG] handle_messages received: {message} from {addr}")
                 parts = message.split(":")
 
-                # Process different message types
-                if parts[0] == "request_vote":
-                    term, candidate_id = int(parts[1]), int(parts[2])
-                    self.process_vote_request(term, candidate_id, addr)
-                elif parts[0] == "heartbeat":
-                    # Distinguish Raft heartbeats from client heartbeats
-                    if parts[1].isdigit() and parts[2].isdigit():
-                        self.process_heartbeat(int(parts[1]), int(parts[2]))
+                if parts[0] == "identify_leader":
+                    client_address = addr  # Set client_address to the sender's address
+                    if self.role == 'leader':
+                        response = "I am the leader"
+                        print("[DEBUG] Server is responding as leader.")
                     else:
-                        client_id = parts[1]
-                        self.renew_lease(client_id)
-                elif parts[0] == "append_entry":
-                    term = int(parts[1])
-                    lock_holder = parts[2] if parts[2] != "None" else None
-                    self.handle_append_entry(term, lock_holder)
-                else:
-                    print(f"[DEBUG] Received unknown message type: {parts[0]} from {addr}")
+                        response = f"Redirect to leader:{self.leader_address[0]}:{self.leader_address[1]}" if self.leader_address else "Leader unknown"
+                        print(f"[DEBUG] Server redirecting to leader: {response}")
+                    self.sock.sendto(response.encode(), client_address)
+                    return
+                # other parts handling here...
 
             except socket.timeout:
                 print("[DEBUG] handle_messages timeout, continuing")
@@ -195,16 +221,6 @@ class LockManagerServer:
             except Exception as e:
                 print(f"[DEBUG] Error in handle_messages: {e}")
                 continue
-
-            if message.startswith("identify_leader"):
-                if self.role == 'leader':
-                    response = "I am the leader"
-                    print("[DEBUG] Server is responding as leader.")
-                else:
-                    response = f"Redirect to leader:{self.leader_address[0]}:{self.leader_address[1]}" if self.leader_address else "Leader unknown"
-                    print(f"[DEBUG] Server redirecting to leader: {response}")
-                self.sock.sendto(response.encode(), client_address)
-                return
 
     def process_other_request_types(self, request_type, client_id, request_id): #other client commands to server for lock managing
         if request_type == "acquire_lock":
@@ -266,7 +282,7 @@ class LockManagerServer:
         while True:
             if self.role == 'follower' and (time.time() - self.last_heartbeat) > self.election_timeout:
                 self.start_election()
-            time.sleep(1)
+            time.sleep(0.1)
 
     def start_election(self):
         self.role = 'candidate'
@@ -301,7 +317,7 @@ class LockManagerServer:
             message = f"heartbeat:{self.term}:{self.server_id}"
             for peer in self.peers:
                 self.sock.sendto(message.encode(), peer)
-            time.sleep(2)  # Send heartbeat every 2 seconds
+            time.sleep(0.5)  # Send heartbeat every 2 seconds
 
     def process_vote_request(self, term, candidate_id, addr):
         # Check term and decide to vote for candidate
