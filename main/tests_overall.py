@@ -408,15 +408,15 @@ def main():
         
         # Phase 1: Run each primary test 5 times
         test_functions = [
-            (network_failure_packet_delay, "network_failure_packet_delay"),
-            (network_failure_packet_drop_server_loss, "network_failure_packet_drop"), 
-            (client_failure_stall_before_edit, "client_failure_stall_before_edit"),
-            (client_failure_stall_after_edit, "client_failure_stall_after_edit"),
-            (single_server_failure_lock_free, "single_server_failure_lock_free"),
-            (single_server_failure_lock_held, "single_server_failure_lock_held"),
+            (network_failure_packet_delay, "network_failure_packet_delay"), #simulated: 100ms delay tc
+            (network_failure_packet_drop_server_loss, "network_failure_packet_drop"), #simulated: 1% loss tc
+            (client_failure_stall_before_edit, "client_failure_stall_before_edit"), #TODO: simulate artificial delays - time.sleep(5) before edit
+            (client_failure_stall_after_edit, "client_failure_stall_after_edit"), #TODO: simulate artificial delays - time.sleep(5) after edit
+            (single_server_failure_lock_free, "single_server_failure_lock_free"), #TODO: terminating the server during the test
+            (single_server_failure_lock_held, "single_server_failure_lock_held"), #TODO: terminating the server during the test
         ]
         for test_func, test_name in test_functions:
-            run_test(test_func, test_name, 5)
+            run_test(test_func, test_name, 20)
         
         # Phase 2: Run 100 instances of the multi-client crash test
         #run_randomized_crash_test("multi_client_crash_test", 100)
@@ -435,3 +435,13 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+"""
+sudo tc qdisc add dev wlp0s20f3 root netem delay 100ms loss 1%
+sudo tc -s qdisc
+
+-run python
+
+sudo tc qdisc del dev wlp0s20f3 root
+
+"""
