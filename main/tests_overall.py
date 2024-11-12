@@ -44,6 +44,8 @@ def network_failure_packet_delay(test_id, f):
         
         log_to_file_and_console(f"{test_id} - Client 1 attempting to acquire lock", f)
         lock_acquired = client1.acquire_lock()
+        log_to_file_and_console(f"{test_id} - Client 1 lock acquired: {lock_acquired}", f)  # Log lock result
+        
         if not lock_acquired:
             log_to_file_and_console(f"{test_id} - Client 1 failed to acquire lock", f)
             log_result("network_failure_packet_delay", False, test_id)
@@ -57,16 +59,21 @@ def network_failure_packet_delay(test_id, f):
         client1.release_lock()
         log_to_file_and_console(f"{test_id} - Client 1 released the lock", f)
 
-        # Allow time for lock release to propagate
-        time.sleep(2)
+        # Allow more time for lock release to propagate
+        time.sleep(5)  
 
         # Client 2 attempts to acquire the lock
         log_to_file_and_console(f"{test_id} - Client 2 attempting to acquire lock", f)
         lock_acquired_client2 = client2.acquire_lock()
+        log_to_file_and_console(f"{test_id} - Client 2 lock acquired: {lock_acquired_client2}", f)  # Log lock result
+        
         if lock_acquired_client2:
             log_to_file_and_console(f"{test_id} - Client 2 acquired the lock", f)
             result_client2 = client2.append_file("file_1", "B")
             log_to_file_and_console(f"{test_id} - Client 2 appended 'B' to file_1 with result: {result_client2}", f)
+            client2.release_lock()
+            log_to_file_and_console(f"{test_id} - Client 2 released the lock", f)
+
         else:
             log_to_file_and_console(f"{test_id} - Client 2 failed to acquire lock", f)
             result_client2 = "failed"
@@ -81,6 +88,7 @@ def network_failure_packet_delay(test_id, f):
         log_to_file_and_console(f"{test_id} - Exception: {e}", f)
         log_result("network_failure_packet_delay", False, test_id)
         return False
+
 
 def network_failure_packet_drop_server_loss(test_id, f):
     try:
@@ -100,6 +108,8 @@ def network_failure_packet_drop_server_loss(test_id, f):
         if lock_acquired_client2:
             result_client2 = client2.append_file("file_1", "B")
             log_to_file_and_console(f"{test_id} - Client 2 appended 'B' to file_1 with result: {result_client2}", f)
+            result_client2 == "append success"
+            client2.release_lock()
         else:
             log_to_file_and_console(f"{test_id} - Client 2 failed to acquire lock", f)
             result_client2 = "failed"
@@ -278,6 +288,8 @@ def single_server_failure_lock_held(test_id, f):
         if lock_acquired_client2:
             result_client2 = client2.append_file("file_1", "B")
             log_to_file_and_console(f"{test_id} - Client 2 appended 'B' to file_1 with result: {result_client2}", f)
+            client2.release_lock()
+            result_client2 == "append success"
         else:
             log_to_file_and_console(f"{test_id} - Client 2 failed to acquire lock", f)
             result_client2 = "failed"
@@ -397,7 +409,7 @@ def main():
         # Phase 1: Run each primary test 5 times
         test_functions = [
             (network_failure_packet_delay, "network_failure_packet_delay"),
-            (network_failure_packet_drop_server_loss, "network_failure_packet_drop"),
+            (network_failure_packet_drop_server_loss, "network_failure_packet_drop"), 
             (client_failure_stall_before_edit, "client_failure_stall_before_edit"),
             (client_failure_stall_after_edit, "client_failure_stall_after_edit"),
             (single_server_failure_lock_free, "single_server_failure_lock_free"),

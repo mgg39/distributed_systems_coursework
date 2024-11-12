@@ -1,8 +1,0 @@
-Test ID: network_failure_packet_delay_4
-Test: network_failure_packet_delay
-Iteration: 4
-Start Time: 2024-11-12 12:30:09.219437
-network_failure_packet_delay_4 - Client 1 attempting to acquire lock
-network_failure_packet_delay_4 - Client 1 failed to acquire lock
-Result: FAIL
-End Time: 2024-11-12 12:30:25.726042

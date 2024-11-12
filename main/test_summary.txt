@@ -1,47 +1,7 @@
 Test Summary
 ====================
-network_failure_packet_delay:
-  Total Runs: 5
-  Successes: 3
-  Failures: 2
-  Failed Test IDs:
-    - network_failure_packet_delay_2
-    - network_failure_packet_delay_4
-
-network_failure_packet_drop_server_loss:
-  Total Runs: 5
-  Successes: 0
-  Failures: 5
-  Failed Test IDs:
-    - network_failure_packet_drop_1
-    - network_failure_packet_drop_2
-    - network_failure_packet_drop_3
-    - network_failure_packet_drop_4
-    - network_failure_packet_drop_5
-
-client_failure_stall_before_edit:
-  Total Runs: 5
-  Successes: 5
-  Failures: 0
-
-client_failure_stall_after_edit:
-  Total Runs: 5
-  Successes: 5
-  Failures: 0
-
-single_server_failure_lock_free:
-  Total Runs: 5
-  Successes: 5
-  Failures: 0
-
 single_server_failure_lock_held:
   Total Runs: 5
-  Successes: 0
-  Failures: 5
-  Failed Test IDs:
-    - single_server_failure_lock_held_1
-    - single_server_failure_lock_held_2
-    - single_server_failure_lock_held_3
-    - single_server_failure_lock_held_4
-    - single_server_failure_lock_held_5
+  Successes: 5
+  Failures: 0
 
