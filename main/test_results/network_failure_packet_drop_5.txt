@@ -1,0 +1,10 @@
+Test ID: network_failure_packet_drop_5
+Test: network_failure_packet_drop
+Iteration: 5
+Start Time: 2024-11-12 12:31:57.370725
+network_failure_packet_drop_5 - Simulating server packet loss for client 1 lock acquisition
+network_failure_packet_drop_5 - Client 1 appended 'A' to file_1 with result: lock not held
+network_failure_packet_drop_5 - Client 2 appended 'B' to file_1 with result: append success
+network_failure_packet_drop_5 - Test result: FAIL
+Result: FAIL
+End Time: 2024-11-12 12:32:18.403158

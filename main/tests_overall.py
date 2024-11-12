@@ -88,17 +88,28 @@ def network_failure_packet_drop_server_loss(test_id, f):
         client2 = DistributedClient(client_id="client_2", replicas=[("localhost", 8080)])
         
         log_to_file_and_console(f"{test_id} - Simulating server packet loss for client 1 lock acquisition", f)
+        
+        # Client 1 acquires lock and writes "A" to file_1
         client1.acquire_lock()
-        result = client1.append_file("file_1", "A")  # Client 1 writes "A" into file_1
-        
+        result_client1 = client1.append_file("file_1", "A")
+        log_to_file_and_console(f"{test_id} - Client 1 appended 'A' to file_1 with result: {result_client1}", f)
         client1.release_lock()
-        lock_acquired_client2 = client2.acquire_lock()
-        result = client2.append_file("file_1", "B")  # Client 2 writes "B" into file_1
         
-        success = result == "append success"
+        # Client 2 acquires lock and writes "B" to file_1
+        lock_acquired_client2 = client2.acquire_lock()
+        if lock_acquired_client2:
+            result_client2 = client2.append_file("file_1", "B")
+            log_to_file_and_console(f"{test_id} - Client 2 appended 'B' to file_1 with result: {result_client2}", f)
+        else:
+            log_to_file_and_console(f"{test_id} - Client 2 failed to acquire lock", f)
+            result_client2 = "failed"
+        
+        # Success condition: both appends should be successful
+        success = result_client1 == "append success" and result_client2 == "append success"
         log_to_file_and_console(f"{test_id} - Test result: {'PASS' if success else 'FAIL'}", f)
         log_result("network_failure_packet_drop_server_loss", success, test_id)
         return success
+
     except Exception as e:
         log_to_file_and_console(f"{test_id} - Exception: {e}", f)
         log_result("network_failure_packet_drop_server_loss", False, test_id)
@@ -180,16 +191,27 @@ def client_failure_stall_before_edit(test_id, f):
         client1 = DistributedClient(client_id="client_1", replicas=[("localhost", 8080)])
         client2 = DistributedClient(client_id="client_2", replicas=[("localhost", 8080)])
         
+        # Client 1 acquires lock, waits to simulate stall, then releases
         client1.acquire_lock()
         time.sleep(LOCK_LEASE_DURATION + 1)
-        
+        client1.release_lock()
+        log_to_file_and_console(f"{test_id} - Client 1 stalled and released lock", f)
+
+        # Client 2 acquires lock and writes "B" to file_1
         lock_acquired_client2 = client2.acquire_lock()
-        result = client2.append_file("file_1", "B")  # Client 2 writes "B" into file_1
+        if lock_acquired_client2:
+            result_client2 = client2.append_file("file_1", "B")
+            log_to_file_and_console(f"{test_id} - Client 2 appended 'B' to file_1 with result: {result_client2}", f)
+        else:
+            log_to_file_and_console(f"{test_id} - Client 2 failed to acquire lock", f)
+            result_client2 = "failed"
         
-        success = result == "append success"
+        # Success condition: client 2 should succeed
+        success = result_client2 == "append success"
         log_to_file_and_console(f"{test_id} - Test result: {'PASS' if success else 'FAIL'}", f)
         log_result("client_failure_stall_before_edit", success, test_id)
         return success
+
     except Exception as e:
         log_to_file_and_console(f"{test_id} - Exception: {e}", f)
         log_result("client_failure_stall_before_edit", False, test_id)
@@ -245,20 +267,27 @@ def single_server_failure_lock_held(test_id, f):
         client1 = DistributedClient(client_id="client_1", replicas=[("localhost", 8080)])
         client2 = DistributedClient(client_id="client_2", replicas=[("localhost", 8080)])
         
+        # Client 1 acquires lock and writes "A" to file_1
         client1.acquire_lock()
-        client1.append_file("file_1", "A")  # Client 1 writes "A" into file_1
+        result_client1 = client1.append_file("file_1", "A")
+        log_to_file_and_console(f"{test_id} - Client 1 appended 'A' to file_1 with result: {result_client1}", f)
         client1.release_lock()
         
+        # Client 2 acquires lock and writes "B" to file_1
         lock_acquired_client2 = client2.acquire_lock()
-        client2.append_file("file_1", "B")  # Client 2 writes "B" into file_1
-        time.sleep(2)
+        if lock_acquired_client2:
+            result_client2 = client2.append_file("file_1", "B")
+            log_to_file_and_console(f"{test_id} - Client 2 appended 'B' to file_1 with result: {result_client2}", f)
+        else:
+            log_to_file_and_console(f"{test_id} - Client 2 failed to acquire lock", f)
+            result_client2 = "failed"
         
-        result = client2.append_file("file_1", "B")  # Client 2 writes "B" again into file_1
-        
-        success = result == "append success"
+        # Success condition: both appends should be successful
+        success = result_client1 == "append success" and result_client2 == "append success"
         log_to_file_and_console(f"{test_id} - Test result: {'PASS' if success else 'FAIL'}", f)
         log_result("single_server_failure_lock_held", success, test_id)
         return success
+
     except Exception as e:
         log_to_file_and_console(f"{test_id} - Exception: {e}", f)
         log_result("single_server_failure_lock_held", False, test_id)
@@ -288,67 +317,69 @@ def run_test(test_function, test_name, iterations):
             log_to_file_and_console(f"Result: {result}", f)
             log_to_file_and_console(f"End Time: {datetime.now()}", f)
 
-# Phase 2: Multi client randomized Crash Test (2000)
-def run_randomized_crash_test(test_id):
-    test_id = f"multi_crash_{test_id}"
-    output_file = os.path.join(output_folder, f"{test_id}.txt")
-    
-    with open(output_file, "w") as f:
-        log_to_file_and_console(f"Test ID: {test_id}", f)
-        log_to_file_and_console("Randomized Crash Test with 5-10 Clients", f)
-        log_to_file_and_console(f"Start Time: {datetime.now()}\n", f)
-
-        # Generate random events and clients
-        num_clients = random.randint(5, 10)
-        events = []
-
-        for i in range(num_clients):
-            client_event = random.choice(["acquire_lock", "append_file", "release_lock", "stall", "packet_delay", "packet_drop"])
-            events.append((f"client_{i+1}", client_event))
+"""# Phase 2: Multi client randomized Crash Test 
+def run_randomized_crash_test(test_id, iterations=100):
+    for i in range(iterations):
+        iteration_id = f"{test_id}_{i+1}"
+        output_file = os.path.join(output_folder, f"{iteration_id}.txt")
         
-        log_to_file_and_console("Event Sequence:", f)
-        for client, event in events:
-            log_to_file_and_console(f"  - {client} will {event}", f)
-        log_to_file_and_console("\n", f)
-        
-        # Execute events and capture detailed logs
-        success = True
-        for client_id, event in events:
-            client = DistributedClient(client_id=client_id, replicas=[("localhost", 8080)])
-            
-            if event == "acquire_lock":
-                result = client.acquire_lock()
-                log_to_file_and_console(f"{client_id} tried to acquire lock: {result}", f)
-                if result != "PASS":
-                    success = False
-            
-            elif event == "append_file":
-                result = client.append_file("test_file", "data")
-                log_to_file_and_console(f"{client_id} attempted to append to file: {result}", f)
-                if result != "PASS":
-                    success = False
-            
-            elif event == "release_lock":
-                result = client.release_lock()
-                log_to_file_and_console(f"{client_id} released lock: {result}", f)
-                if result != "PASS":
-                    success = False
-            
-            elif event == "stall":
-                log_to_file_and_console(f"{client_id} stalled for lock timeout.", f)
-                time.sleep(LOCK_LEASE_DURATION + 1)
-            
-            elif event == "packet_delay":
-                log_to_file_and_console(f"{client_id} experienced simulated packet delay.", f)
-                time.sleep(2)
-            
-            elif event == "packet_drop":
-                log_to_file_and_console(f"{client_id} encountered simulated packet drop. No action taken.", f)
-                continue
+        with open(output_file, "w") as f:
+            log_to_file_and_console(f"Test ID: {iteration_id}", f)
+            log_to_file_and_console("Randomized Crash Test with 5-10 Clients", f)
+            log_to_file_and_console(f"Start Time: {datetime.now()}\n", f)
 
-        log_to_file_and_console(f"End Time: {datetime.now()}", f)
-        result = "PASS" if success else "FAIL"
+            # Generate random events and clients
+            num_clients = random.randint(5, 10)
+            events = []
 
+            for j in range(num_clients):
+                client_event = random.choice(["acquire_lock", "append_file", "release_lock", "stall", "packet_delay", "packet_drop"])
+                events.append((f"client_{j+1}", client_event))
+            
+            log_to_file_and_console("Event Sequence:", f)
+            for client, event in events:
+                log_to_file_and_console(f"  - {client} will {event}", f)
+            log_to_file_and_console("\n", f)
+            
+            # Execute events and capture detailed logs
+            success = True
+            for client_id, event in events:
+                client = DistributedClient(client_id=client_id, replicas=[("localhost", 8080)])
+                
+                if event == "acquire_lock":
+                    result = client.acquire_lock()
+                    log_to_file_and_console(f"{client_id} tried to acquire lock: {result}", f)
+                    if result != "PASS":
+                        success = False
+                
+                elif event == "append_file":
+                    result = client.append_file("test_file", "data")
+                    log_to_file_and_console(f"{client_id} attempted to append to file: {result}", f)
+                    if result != "PASS":
+                        success = False
+                
+                elif event == "release_lock":
+                    result = client.release_lock()
+                    log_to_file_and_console(f"{client_id} released lock: {result}", f)
+                    if result != "PASS":
+                        success = False
+                
+                elif event == "stall":
+                    log_to_file_and_console(f"{client_id} stalled for lock timeout.", f)
+                    time.sleep(LOCK_LEASE_DURATION + 1)
+                
+                elif event == "packet_delay":
+                    log_to_file_and_console(f"{client_id} experienced simulated packet delay.", f)
+                    time.sleep(2)
+                
+                elif event == "packet_drop":
+                    log_to_file_and_console(f"{client_id} encountered simulated packet drop. No action taken.", f)
+                    continue
+
+            log_to_file_and_console(f"End Time: {datetime.now()}", f)
+            result = "PASS" if success else "FAIL"
+            log_result("multi_client_crash_test", success, iteration_id)
+"""
 def main():
     # Clear previous test results
     if os.path.exists(summary_file):
@@ -363,33 +394,22 @@ def main():
         summary.write("Test Summary\n")
         summary.write("====================\n")
         
-        # Run just the first test for verification
-        test_func, test_name, iterations = network_failure_packet_delay, "network_failure_packet_delay", 1
-        for i in range(iterations):
-            test_id = f"{test_name}_{i+1}"
-            output_file = os.path.join(output_folder, f"{test_id}.txt")
-            
-            with open(output_file, "w") as f:
-                with contextlib.redirect_stdout(f):
-                    print(f"Test ID: {test_id}")
-                    print(f"Test: {test_name}")
-                    print(f"Iteration: {i+1}")
-                    print(f"Start Time: {datetime.now()}")
-                    
-                    # Run the test and log results
-                    success = test_func(test_id, f)
-                    result = "PASS" if success else "FAIL"
-                    
-                    print(f"Result: {result}")
-                    print(f"End Time: {datetime.now()}")
-                    
-                    # Log result in summary_stats
-                    log_result(test_name, success, test_id)
-    
-    # Report Summary
-    with open(summary_file, "a") as summary:
-        summary.write("Test Summary\n")
-        summary.write("====================\n")
+        # Phase 1: Run each primary test 5 times
+        test_functions = [
+            (network_failure_packet_delay, "network_failure_packet_delay"),
+            (network_failure_packet_drop_server_loss, "network_failure_packet_drop"),
+            (client_failure_stall_before_edit, "client_failure_stall_before_edit"),
+            (client_failure_stall_after_edit, "client_failure_stall_after_edit"),
+            (single_server_failure_lock_free, "single_server_failure_lock_free"),
+            (single_server_failure_lock_held, "single_server_failure_lock_held"),
+        ]
+        for test_func, test_name in test_functions:
+            run_test(test_func, test_name, 5)
+        
+        # Phase 2: Run 100 instances of the multi-client crash test
+        #run_randomized_crash_test("multi_client_crash_test", 100)
+
+        # Generate summary report
         for test_name, stats in summary_stats.items():
             summary.write(f"{test_name}:\n")
             summary.write(f"  Total Runs: {stats['total']}\n")

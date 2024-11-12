@@ -1,36 +1,13 @@
 Test ID: network_failure_packet_delay_1
 Test: network_failure_packet_delay
 Iteration: 1
-Start Time: 2024-11-12 11:38:29.736101
+Start Time: 2024-11-12 12:29:41.131690
 network_failure_packet_delay_1 - Client 1 attempting to acquire lock
-network_failure_packet_delay_1 - Client 1 attempting to acquire lock
-client_1 - Attempting to find leader
-Attempt 1: Sending 'identify_leader:client_1' to ('localhost', 8080)
-client_1 - Received response: I am the leader
-client_1 - Leader found: ('localhost', 8080)
-Attempt 1: Sending 'acquire_lock:client_1:1:' to ('localhost', 8080)
-Attempt 1: Sending 'append_file:client_1:2:file_1%3AA' to ('localhost', 8080)
-client_1: Data appended to file_1
 network_failure_packet_delay_1 - Client 1 appended 'A' to file_1 with result: append success
-network_failure_packet_delay_1 - Client 1 appended 'A' to file_1 with result: append success
-Attempt 1: Sending 'release_lock:client_1:3:' to ('localhost', 8080)
-client_1: Lock released successfully.
-network_failure_packet_delay_1 - Client 1 released the lock
 network_failure_packet_delay_1 - Client 1 released the lock
 network_failure_packet_delay_1 - Client 2 attempting to acquire lock
-network_failure_packet_delay_1 - Client 2 attempting to acquire lock
-client_2 - Attempting to find leader
-Attempt 1: Sending 'identify_leader:client_2' to ('localhost', 8080)
-client_2 - Received response: I am the leader
-client_2 - Leader found: ('localhost', 8080)
-Attempt 1: Sending 'acquire_lock:client_2:1:' to ('localhost', 8080)
 network_failure_packet_delay_1 - Client 2 acquired the lock
-network_failure_packet_delay_1 - Client 2 acquired the lock
-Attempt 1: Sending 'append_file:client_2:2:file_1%3AB' to ('localhost', 8080)
-client_2: Data appended to file_1
 network_failure_packet_delay_1 - Client 2 appended 'B' to file_1 with result: append success
-network_failure_packet_delay_1 - Client 2 appended 'B' to file_1 with result: append success
-network_failure_packet_delay_1 - Test result evaluated: PASS
 network_failure_packet_delay_1 - Test result evaluated: PASS
 Result: PASS
-End Time: 2024-11-12 11:38:33.765147
+End Time: 2024-11-12 12:29:45.169499
