@@ -18,7 +18,7 @@ for i in range(NUM_FILES):
     open(os.path.join(FILES_DIR, f"file_{i}"), 'a').close()
 
 class LockManagerServer:
-    def __init__(self, host='localhost', port=8082, server_id=2, peers=[("localhost", 8081), ("localhost", 8085)]):
+    def __init__(self, host='localhost', port=8080, server_id=1, peers=[("localhost", 8083), ("localhost", 8085)]):
         self.server_address = (host, port)
         self.server_id = server_id
         self.peers = peers
@@ -182,6 +182,10 @@ class LockManagerServer:
         elif message == "identify_leader":
             response = "I am the leader" if self.role == 'leader' else f"Redirect to leader at {self.leader_address}"
             self.sock.sendto(response.encode(), client_address)
+        
+        elif message == "ping":
+            response = "pong"
+            self.sock.sendto(response.encode(), client_address)
 
     def heartbeat_check(self):
         while True:
@@ -190,6 +194,7 @@ class LockManagerServer:
                 self.start_election()
             time.sleep(0.1)
 
+    """
     def start_election(self):
         if self.server_id != 1:  # Only non-primary servers initiate elections
             self.role = 'candidate'
@@ -206,6 +211,55 @@ class LockManagerServer:
                 self.send_heartbeats()
             else:
                 self.role = 'follower'
+    """
+    
+    def start_election(self):
+        # Only start an election if this server isn't already the leader
+        if self.role == 'leader':
+            return
+
+        # Assume this server will be the leader unless a lower-ID server is found to be active
+        lowest_active_peer_found = False
+
+        # Check each lower-ID server to see if it's alive
+        for peer_id, peer_address in sorted([(i+1, p) for i, p in enumerate(self.peers)]):
+            if peer_id < self.server_id:
+                # Ping each lower-ID peer to check if they are still alive
+                if self.is_peer_alive(peer_address):
+                    # If an active lower-ID server is found, this server should not be the leader
+                    self.role = 'follower'
+                    self.leader_address = peer_address
+                    print(f"[DEBUG] Server {self.server_id} defers to active lower-ID leader: Server {peer_id}")
+                    lowest_active_peer_found = True
+                    break
+
+        # If no active lower-ID servers were found, this server becomes the leader
+        if not lowest_active_peer_found:
+            self.role = 'leader'
+            self.leader_address = self.server_address
+            print(f"[DEBUG] Server {self.server_id} became the leader due to no active lower-ID servers")
+            self.send_heartbeats()
+        
+    def is_peer_alive(self, peer_address):
+        try:
+            # Send a "ping" message to the peer
+            self.sock.sendto("ping".encode(), peer_address)
+            print(f"[DEBUG] Server {self.server_id} sent ping to {peer_address}")
+            
+            # Set a timeout for receiving the response
+            self.sock.settimeout(1)
+            
+            # Wait for the response
+            response, _ = self.sock.recvfrom(1024)
+            
+            # Check if the response is "pong"
+            if response.decode() == "pong":
+                print(f"[DEBUG] Server {self.server_id} received pong from {peer_address}")
+                return True
+        except socket.timeout:
+            print(f"[DEBUG] Server {self.server_id} timed out waiting for response from {peer_address}")
+        return False
+
 
     def request_vote(self, peer, term, candidate_id):
         message = f"request_vote:{term}:{candidate_id}"
