@@ -56,13 +56,6 @@ class LockManagerServer:
         threading.Thread(target=self.heartbeat_check, daemon=True).start()
         threading.Thread(target=self.handle_messages, daemon=True).start()
 
-        # Start threads
-        if self.role == 'leader':
-            threading.Thread(target=self.send_heartbeats, daemon=True).start()
-        threading.Thread(target=self.monitor_lock_expiration, daemon=True).start()
-        threading.Thread(target=self.heartbeat_check, daemon=True).start()
-        threading.Thread(target=self.handle_messages, daemon=True).start()
-
     def start(self):
         print(f"Server {self.server_id} listening on {self.server_address}")
         while True:
@@ -86,6 +79,14 @@ class LockManagerServer:
                     candidate_id = int(parts[2])
                     self.process_vote_request(term, candidate_id, addr)
 
+                elif parts[0] == "lock_state":
+                    lock_data = parts[1]
+                    self.sync_lock_state(lock_data)
+
+                elif parts[0] == "file_update":
+                    file_name, file_data = parts[1], parts[2]
+                    self.sync_file(file_name, file_data)
+
             except socket.timeout:
                 continue
             except Exception as e:
@@ -108,6 +109,26 @@ class LockManagerServer:
             self.last_heartbeat = time.time()
             print(f"[DEBUG] Voted for candidate {candidate_id} for term {term}")
 
+    #----------Replica logic---------------
+    def sync_lock_state(self, lock_data):
+        # Synchronize lock state from leader
+        with self.lock:
+            lock_state = json.loads(lock_data)
+            self.current_lock_holder = lock_state.get("current_lock_holder")
+            self.lock_expiration_time = lock_state.get("lock_expiration_time")
+            print(f"[DEBUG] Synchronized lock state from leader")
+
+    def sync_file(self, file_name, file_data):
+        # Synchronize file append from leader
+        print(f"[DEBUG] Follower syncing file {file_name} with data: {file_data}")
+        file_path = os.path.join(FILES_DIR, file_name)
+        with open(file_path, 'a') as f:
+            f.write(file_data + "\n")
+            f.flush()
+            os.fsync(f.fileno())
+        print(f"[DEBUG] Synchronized file {file_name} with data: {file_data} on follower")
+    #----------Replica logic---------------
+
     def acquire_lock(self, client_id):
         if self.role == 'leader':
             with self.lock:
@@ -115,6 +136,7 @@ class LockManagerServer:
                 if not self.current_lock_holder or (self.lock_expiration_time and current_time > self.lock_expiration_time):
                     self.current_lock_holder = client_id
                     self.lock_expiration_time = current_time + LOCK_LEASE_DURATION
+                    self.notify_followers_lock_state()
                     self.save_state()
                     return f"grant lock:{LOCK_LEASE_DURATION}"
                 else:
@@ -148,11 +170,32 @@ class LockManagerServer:
                     f.write(data + "\n")
                     f.flush()
                     os.fsync(f.fileno())
+                self.notify_followers_file_update(file_name, data)
                 return "append success"
             else:
                 return "File not found"
         else:
             return "You do not hold the lock"
+        
+    #----------Replica logic---------------
+
+    def notify_followers_file_update(self, file_name, file_data):
+        print(f"[DEBUG] Leader sending file update for {file_name} with data: {file_data}")
+        for peer in self.peers:
+            message = f"file_update:{file_name}:{file_data}"
+            self.sock.sendto(message.encode(), peer)
+
+    def notify_followers_lock_state(self):
+        lock_data = json.dumps({
+            "current_lock_holder": self.current_lock_holder,
+            "lock_expiration_time": self.lock_expiration_time
+        })
+        for peer in self.peers:
+            message = f"lock_state:{lock_data}"
+            self.sock.sendto(message.encode(), peer)
+
+    #----------Replica logic---------------
+
 
     def monitor_lock_expiration(self):
         while True:
@@ -194,25 +237,6 @@ class LockManagerServer:
                 print(f"[DEBUG] Server {self.server_id} detected leader failure, starting election")
                 self.start_election()
             time.sleep(0.1)
-
-    """
-    def start_election(self):
-        if self.server_id != 1:  # Only non-primary servers initiate elections
-            self.role = 'candidate'
-            self.term += 1
-            votes = 1
-            for peer in self.peers:
-                response = self.request_vote(peer, self.term, self.server_id)
-                if response == "vote_granted":
-                    votes += 1
-            if votes > len(self.peers) // 2:
-                self.role = 'leader'
-                self.leader_address = self.server_address
-                print(f"[DEBUG] Server {self.server_id} became the leader for term {self.term}")
-                self.send_heartbeats()
-            else:
-                self.role = 'follower'
-    """
     
     def start_election(self):
         # Only start an election if this server isn't already the leader
