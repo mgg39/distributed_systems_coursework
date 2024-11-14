@@ -6,7 +6,7 @@ import urllib.parse
 
 class DistributedClient:
     def __init__(self, client_id, replicas):
-        self.client_id = client_id
+        self.client_id = client_idcou
         self.replicas = replicas  # List of known server addresses (host, port)
         self.current_leader = None
         self.connection = None  # Will be set when we find the leader

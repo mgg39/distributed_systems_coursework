@@ -55,13 +55,6 @@ class LockManagerServer:
         threading.Thread(target=self.heartbeat_check, daemon=True).start()
         threading.Thread(target=self.handle_messages, daemon=True).start()
 
-        # Start threads
-        if self.role == 'leader':
-            threading.Thread(target=self.send_heartbeats, daemon=True).start()
-        threading.Thread(target=self.monitor_lock_expiration, daemon=True).start()
-        threading.Thread(target=self.heartbeat_check, daemon=True).start()
-        threading.Thread(target=self.handle_messages, daemon=True).start()
-
     def start(self):
         print(f"Server {self.server_id} listening on {self.server_address}")
         while True:
@@ -193,25 +186,6 @@ class LockManagerServer:
                 print(f"[DEBUG] Server {self.server_id} detected leader failure, starting election")
                 self.start_election()
             time.sleep(0.1)
-
-    """
-    def start_election(self):
-        if self.server_id != 1:  # Only non-primary servers initiate elections
-            self.role = 'candidate'
-            self.term += 1
-            votes = 1
-            for peer in self.peers:
-                response = self.request_vote(peer, self.term, self.server_id)
-                if response == "vote_granted":
-                    votes += 1
-            if votes > len(self.peers) // 2:
-                self.role = 'leader'
-                self.leader_address = self.server_address
-                print(f"[DEBUG] Server {self.server_id} became the leader for term {self.term}")
-                self.send_heartbeats()
-            else:
-                self.role = 'follower'
-    """
     
     def start_election(self):
         # Only start an election if this server isn't already the leader
