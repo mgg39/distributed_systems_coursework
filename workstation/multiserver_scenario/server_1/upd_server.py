@@ -81,16 +81,29 @@ class LockManagerServer:
                 elif parts[0] == "lock_state":
                     lock_data = parts[1]
                     self.sync_lock_state(lock_data)
-                    #TODO: respond - aknowledge updates
+                    #respond - aknowledge updates
                     if self.sync_lock_state(lock_data) == True:
                         self.sock.sendto(message.encode(), self.leader_address)
 
                 elif parts[0] == "file_update":
                     file_name, file_data = parts[1], parts[2]
                     self.sync_file(file_name, file_data)
-                    #TODO: respond - aknowledge updates
+                    #respond - aknowledge updates
                     if self.sync_file(lock_data) == True:
                         self.sock.sendto(message.encode(), self.leader_address)
+                
+                #Distributed client
+                elif parts[0] == "identify_leader":
+                    # Respond to leader identification requests
+                    print(f'[DEBUG] I am receiving leader question')
+                    if self.role == 'leader':
+                        response = "I am the leader"
+                    else:
+                        if self.leader_address:
+                            response = f"Redirect to leader:{self.leader_address[0]}:{self.leader_address[1]}"
+                        else:
+                            response = "Leader unknown"
+                    self.sock.sendto(response.encode(), client_address)                
 
             except socket.timeout:
                 continue
