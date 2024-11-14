@@ -81,10 +81,16 @@ class LockManagerServer:
                 elif parts[0] == "lock_state":
                     lock_data = parts[1]
                     self.sync_lock_state(lock_data)
+                    #TODO: respond - aknowledge updates
+                    if self.sync_lock_state(lock_data) == True:
+                        self.sock.sendto(message.encode(), self.leader_address)
 
                 elif parts[0] == "file_update":
                     file_name, file_data = parts[1], parts[2]
                     self.sync_file(file_name, file_data)
+                    #TODO: respond - aknowledge updates
+                    if self.sync_file(lock_data) == True:
+                        self.sock.sendto(message.encode(), self.leader_address)
 
             except socket.timeout:
                 continue
@@ -116,6 +122,7 @@ class LockManagerServer:
             self.current_lock_holder = lock_state.get("current_lock_holder")
             self.lock_expiration_time = lock_state.get("lock_expiration_time")
             print(f"[DEBUG] Synchronized lock state from leader")
+            return True
 
     def sync_file(self, file_name, file_data):
         # Synchronize file append from leader
@@ -126,6 +133,7 @@ class LockManagerServer:
             f.flush()
             os.fsync(f.fileno())
         print(f"[DEBUG] Synchronized file {file_name} with data: {file_data} on follower")
+        return True
     #----------Replica logic---------------
 
     def acquire_lock(self, client_id):
