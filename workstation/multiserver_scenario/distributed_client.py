@@ -46,15 +46,12 @@ class DistributedClient:
                         print(f"{self.client_id} - Redirected to leader: {self.current_leader}")
                         return True
                 elif response == "Leader unknown":
-                    # Continue searching without assuming this server is the leader
                     print(f"{self.client_id} - Server at {address} does not know the leader. Continuing search.")
                 elif response.startswith("Timeout"):
                     unreachable_servers.add(address)
                     
-            # Delay between attempts to prevent flooding and allow time for stabilization
             time.sleep(delay)
 
-        # If retries are exhausted and no leader is found
         self.current_leader = None
         print(f"{self.client_id} - Failed to find leader after {retries} attempts")
         return False
@@ -64,15 +61,16 @@ class DistributedClient:
         if not self.current_leader and not self.find_leader():
             return "Leader not found"
         
-        # Send msg, retry on redirect
-        response = self.connection.rpc_send(f"{message_type}:{self.client_id}:{self.next_request_id()}:{urllib.parse.quote(additional_info)}")
+        # Send message to the leader, retry on redirect
+        message = f"{message_type}:{self.client_id}:{urllib.parse.quote(additional_info)}"
+        response = self.connection.rpc_send(message)
         if response.startswith("Redirect to leader"):
-            if not self.find_leader():  # Update leader if redirected
+            if not self.find_leader():
                 return "Leader redirect failed"
-            return self.send_message(message_type, additional_info)  # Retry msg to new leader
+            return self.send_message(message_type, additional_info)
         return response
 
-    def acquire_lock(self, max_retries=5, base_interval=0.5):  # shorter base interval
+    def acquire_lock(self, max_retries=5, base_interval=0.5):  
         retry_interval = base_interval
         for attempt in range(max_retries):
             response = self.send_message("acquire_lock")
@@ -88,18 +86,16 @@ class DistributedClient:
             else:
                 print(f"{self.client_id}: Failed to acquire lock - {response}")
             time.sleep(retry_interval)
-            retry_interval *= 2  # Still exponential but starts with shorter interval
+            retry_interval *= 2  
         return False
-
 
     def start_lease_timer(self):
         expiration_time = time.time() + self.lease_duration
         while time.time() < expiration_time and self.lock_acquired:
             time.sleep(1)
         if self.lock_acquired:
-            self.lock_acquired = False  # Mark lock as expired
+            self.lock_acquired = False  
             print(f"{self.client_id}: Lock lease expired")
-
 
     def release_lock(self):
         if self.lock_acquired:
@@ -117,21 +113,19 @@ class DistributedClient:
             response = self.send_message("heartbeat")
             if response != "lease renewed":
                 print(f"{self.client_id}: Failed to renew lease, response: {response}")
-                self.lock_acquired = False  # Mark lock as lost
+                self.lock_acquired = False  
                 break
             time.sleep(self.lease_duration / 3)
 
     def append_file(self, file_name, data):
         # Appends data to file if lock held
         if self.lock_acquired:
-            response = self.send_message("append_file", f"{file_name}:{data}")
+            additional_info = f"{file_name}:{data}"
+            response = self.send_message("append_file", additional_info)
             
             if response == "append success":
                 print(f"{self.client_id}: Data appended to {file_name}")
                 return "append success"
-            elif response == "append failed on replicas":
-                print(f"{self.client_id}: Append succeeded locally but failed on replicas.")
-                return "replication failed"
             else:
                 print(f"{self.client_id}: Append failed or no response - {response}")
                 return response
@@ -140,23 +134,17 @@ class DistributedClient:
             return "lock not held"
 
     def close(self):
-        # Closes connection
         if self.connection:
             self.connection.close()
         print(f"{self.client_id}: Connection closed.")
 
 if __name__ == "__main__":
-    # list of known server addresses
     replicas = [('localhost', 8080), ('localhost', 8082), ('localhost', 8084)]
     client = DistributedClient("client_1", replicas)
     
     try:
-        # Try to acquire lock with retries
         if client.acquire_lock():
-            # Append data to file if lock acquired
             client.append_file("file_1", "This is a test log entry.")
     finally:
-        # Ensure lock is released after operations are complete
         client.release_lock()
-        # Close the connection
         client.close()
