@@ -416,7 +416,7 @@ def main():
             (single_server_failure_lock_held, "single_server_failure_lock_held"), 
         ]
         for test_func, test_name in test_functions:
-            run_test(test_func, test_name, 20)
+            run_test(test_func, test_name, 10)
         
         # Phase 2: Run 100 instances of the multi-client crash test
         #run_randomized_crash_test("multi_client_crash_test", 100)

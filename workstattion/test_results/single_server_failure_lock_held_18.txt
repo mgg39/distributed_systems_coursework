@@ -1,9 +1,0 @@
-Test ID: single_server_failure_lock_held_18
-Test: single_server_failure_lock_held
-Iteration: 18
-Start Time: 2024-11-12 14:44:06.980741
-single_server_failure_lock_held_18 - Client 1 appended 'A' to file_1 with result: append success
-single_server_failure_lock_held_18 - Client 2 appended 'B' to file_1 with result: append success
-single_server_failure_lock_held_18 - Test result: PASS
-Result: PASS
-End Time: 2024-11-12 14:44:09.072079

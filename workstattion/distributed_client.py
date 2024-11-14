@@ -19,28 +19,44 @@ class DistributedClient:
         self.request_id += 1
         return str(self.request_id)
 
-    def find_leader(self):
-        print(f"{self.client_id} - Attempting to find leader")
-        unreachable_servers = set()
-        for address in self.replicas:
-            if address in unreachable_servers:
-                continue
-            self.connection = RPCConnection(*address)
-            response = self.connection.rpc_send(f"identify_leader:{self.client_id}")
-            print(f"{self.client_id} - Received response: {response}")
+    def find_leader(self, retries=5, delay=2):
+        for attempt in range(retries):
+            print(f"{self.client_id} - Attempting to find leader, attempt {attempt + 1}/{retries}")
+            unreachable_servers = set()
             
-            if response == "I am the leader":
-                self.current_leader = address
-                print(f"{self.client_id} - Leader found: {self.current_leader}")
-                time.sleep(1)  # Short delay to let leader fully stabilize
-                return True
-            elif response.startswith("Redirect to leader"):
-                # Handle redirect if any
-                # (Current response suggests this isn't happening)
-                pass
-            elif response.startswith("Timeout"):
-                unreachable_servers.add(address)
+            for address in self.replicas:
+                if address in unreachable_servers:
+                    continue
+                self.connection = RPCConnection(*address)
+                response = self.connection.rpc_send(f"identify_leader:{self.client_id}")
+                print(f"{self.client_id} - Received response: {response}")
+                
+                if response == "I am the leader":
+                    self.current_leader = address
+                    print(f"{self.client_id} - Leader found: {self.current_leader}")
+                    time.sleep(1)  # Short delay to let leader fully stabilize
+                    return True
+                elif response.startswith("Redirect to leader"):
+                    # Extract the redirected leader's address and retry finding it
+                    parts = response.split(":")
+                    if len(parts) == 3:
+                        redirected_host = parts[1]
+                        redirected_port = int(parts[2])
+                        self.current_leader = (redirected_host, redirected_port)
+                        print(f"{self.client_id} - Redirected to leader: {self.current_leader}")
+                        return True
+                elif response == "Leader unknown":
+                    # Continue searching without assuming this server is the leader
+                    print(f"{self.client_id} - Server at {address} does not know the leader. Continuing search.")
+                elif response.startswith("Timeout"):
+                    unreachable_servers.add(address)
+                    
+            # Delay between attempts to prevent flooding and allow time for stabilization
+            time.sleep(delay)
+
+        # If retries are exhausted and no leader is found
         self.current_leader = None
+        print(f"{self.client_id} - Failed to find leader after {retries} attempts")
         return False
 
     def send_message(self, message_type, additional_info=""):
