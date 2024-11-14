@@ -26,8 +26,16 @@ def append_to_file(client_id, file_name, data):
 
 if __name__ == "__main__":
     client_id = "client_1"
-    acquire_lock(client_id)  # Client 1 tries to acquire the lock
+    
+    # Client 1 tries to acquire the lock
+    acquire_lock(client_id)  
     time.sleep(2)
+    
+    # Client 1 appends data to file and waits for leader acknowledgment
     append_to_file(client_id, "file_0", "Sample data")
+    
+    # Allow time for file update to be processed and acknowledgment received
     time.sleep(2)
-    release_lock(client_id)  # Client 1 releases the lock
+    
+    # Client 1 releases the lock
+    release_lock(client_id)  

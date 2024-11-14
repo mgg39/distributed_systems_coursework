@@ -78,6 +78,14 @@ class LockManagerServer:
                     candidate_id = int(parts[2])
                     self.process_vote_request(term, candidate_id, addr)
 
+                elif parts[0] == "lock_state":
+                    lock_data = parts[1]
+                    self.sync_lock_state(lock_data)
+
+                elif parts[0] == "file_update":
+                    file_name, file_data = parts[1], parts[2]
+                    self.sync_file(file_name, file_data)
+
             except socket.timeout:
                 continue
             except Exception as e:
@@ -100,6 +108,26 @@ class LockManagerServer:
             self.last_heartbeat = time.time()
             print(f"[DEBUG] Voted for candidate {candidate_id} for term {term}")
 
+    #----------Replica logic---------------
+    def sync_lock_state(self, lock_data):
+        # Synchronize lock state from leader
+        with self.lock:
+            lock_state = json.loads(lock_data)
+            self.current_lock_holder = lock_state.get("current_lock_holder")
+            self.lock_expiration_time = lock_state.get("lock_expiration_time")
+            print(f"[DEBUG] Synchronized lock state from leader")
+
+    def sync_file(self, file_name, file_data):
+        # Synchronize file append from leader
+        print(f"[DEBUG] Follower syncing file {file_name} with data: {file_data}")
+        file_path = os.path.join(FILES_DIR, file_name)
+        with open(file_path, 'a') as f:
+            f.write(file_data + "\n")
+            f.flush()
+            os.fsync(f.fileno())
+        print(f"[DEBUG] Synchronized file {file_name} with data: {file_data} on follower")
+    #----------Replica logic---------------
+
     def acquire_lock(self, client_id):
         if self.role == 'leader':
             with self.lock:
@@ -107,6 +135,7 @@ class LockManagerServer:
                 if not self.current_lock_holder or (self.lock_expiration_time and current_time > self.lock_expiration_time):
                     self.current_lock_holder = client_id
                     self.lock_expiration_time = current_time + LOCK_LEASE_DURATION
+                    self.notify_followers_lock_state()
                     self.save_state()
                     return f"grant lock:{LOCK_LEASE_DURATION}"
                 else:
@@ -138,26 +167,34 @@ class LockManagerServer:
             if os.path.exists(file_path):
                 with open(file_path, 'a') as f:
                     f.write(data + "\n")
-                print(f"[DEBUG] {client_id} appended to {file_name}: '{data}'")
-                self.replicate_to_replicas(file_name, data)  # Replicate changes to other servers
+                    f.flush()
+                    os.fsync(f.fileno())
+                self.notify_followers_file_update(file_name, data)
                 return "append success"
             else:
                 return "File not found"
         else:
             return "You do not hold the lock"
-    
-    def replicate_to_replicas(self, file_name, data):
-        """Send the append operation to all available replicas and wait for acknowledgments."""
-        message = json.dumps({"action": "replicate", "file": file_name, "data": data})
+        
+    #----------Replica logic---------------
+
+    def notify_followers_file_update(self, file_name, file_data):
+        print(f"[DEBUG] Leader sending file update for {file_name} with data: {file_data}")
         for peer in self.peers:
-            try:
-                self.sock.sendto(message.encode(), (peer[0], peer[1]))
-                # Wait for acknowledgment for strong consistency
-                ack, _ = self.sock.recvfrom(1024)
-                if ack.decode() != "ack":
-                    print(f"[DEBUG] No ack received from {peer}, retrying...")
-            except socket.timeout:
-                print(f"[DEBUG] Replica {peer} is unreachable.")
+            message = f"file_update:{file_name}:{file_data}"
+            self.sock.sendto(message.encode(), peer)
+
+    def notify_followers_lock_state(self):
+        lock_data = json.dumps({
+            "current_lock_holder": self.current_lock_holder,
+            "lock_expiration_time": self.lock_expiration_time
+        })
+        for peer in self.peers:
+            message = f"lock_state:{lock_data}"
+            self.sock.sendto(message.encode(), peer)
+
+    #----------Replica logic---------------
+
 
     def monitor_lock_expiration(self):
         while True:
@@ -168,36 +205,6 @@ class LockManagerServer:
                     self.save_state()
             time.sleep(1)
     
-    def handle_recovery_sync(self, client_id):
-        """Handle synchronization for a recovering replica."""
-        for i in range(NUM_FILES):
-            file_name = f"file_{i}"
-            file_path = os.path.join(FILES_DIR, file_name)
-            with open(file_path, 'r') as f:
-                data = f.read()
-            recovery_message = json.dumps({"action": "recover", "file": file_name, "data": data})
-            self.sock.sendto(recovery_message.encode(), (self.server_address[0], self.server_address[1] + 1))
-
-    def handle_replicate(self, file_name, data):
-        """Handle replication requests from the leader to update local files."""
-        file_path = os.path.join(FILES_DIR, file_name)
-        with open(file_path, 'a') as f:
-            f.write(data + "\n")
-        print(f"[DEBUG] Replica updated {file_name} with '{data}'")
-        self.sock.sendto("ack".encode(), self.leader_address)  # Send acknowledgment
-
-    def handle_messages(self):
-        while True:
-            try:
-                data, addr = self.raft_sock.recvfrom(1024)
-                message = json.loads(data.decode())
-                if message["action"] == "replicate":
-                    self.handle_replicate(message["file"], message["data"])
-                elif message["action"] == "recover":
-                    self.handle_replicate(message["file"], message["data"])
-            except socket.timeout:
-                continue
-
     def handle_request(self, data, client_address):
         message = data.decode()
         if message.startswith("acquire_lock"):
@@ -211,19 +218,16 @@ class LockManagerServer:
             self.sock.sendto(response.encode(), client_address)
 
         elif message.startswith("append_file"):
-            parts = message.split(":")
-            if len(parts) == 4:
-                client_id = parts[1]
-                file_name = parts[2]
-                file_data = parts[3]
-                response = self.append_to_file(client_id, file_name, file_data)
-                self.sock.sendto(response.encode(), client_address)
-                print(f"[DEBUG] Sent append_file response: {response}")
-            else:
-                print(f"[ERROR] Malformed append_file message: {message}")
+            client_id, file_name, file_data = message.split(":")[1:4]
+            response = self.append_to_file(client_id, file_name, file_data)
+            self.sock.sendto(response.encode(), client_address)
 
         elif message == "identify_leader":
             response = "I am the leader" if self.role == 'leader' else f"Redirect to leader at {self.leader_address}"
+            self.sock.sendto(response.encode(), client_address)
+        
+        elif message == "ping":
+            response = "pong"
             self.sock.sendto(response.encode(), client_address)
 
     def heartbeat_check(self):
@@ -232,23 +236,54 @@ class LockManagerServer:
                 print(f"[DEBUG] Server {self.server_id} detected leader failure, starting election")
                 self.start_election()
             time.sleep(0.1)
-
+    
     def start_election(self):
-        if self.server_id != 1:  # Only non-primary servers initiate elections
-            self.role = 'candidate'
-            self.term += 1
-            votes = 1
-            for peer in self.peers:
-                response = self.request_vote(peer, self.term, self.server_id)
-                if response == "vote_granted":
-                    votes += 1
-            if votes > len(self.peers) // 2:
-                self.role = 'leader'
-                self.leader_address = self.server_address
-                print(f"[DEBUG] Server {self.server_id} became the leader for term {self.term}")
-                self.send_heartbeats()
-            else:
-                self.role = 'follower'
+        # Only start an election if this server isn't already the leader
+        if self.role == 'leader':
+            return
+
+        # Assume this server will be the leader unless a lower-ID server is found to be active
+        lowest_active_peer_found = False
+
+        # Check each lower-ID server to see if it's alive
+        for peer_id, peer_address in sorted([(i+1, p) for i, p in enumerate(self.peers)]):
+            if peer_id < self.server_id:
+                # Ping each lower-ID peer to check if they are still alive
+                if self.is_peer_alive(peer_address):
+                    # If an active lower-ID server is found, this server should not be the leader
+                    self.role = 'follower'
+                    self.leader_address = peer_address
+                    print(f"[DEBUG] Server {self.server_id} defers to active lower-ID leader: Server {peer_id}")
+                    lowest_active_peer_found = True
+                    break
+
+        # If no active lower-ID servers were found, this server becomes the leader
+        if not lowest_active_peer_found:
+            self.role = 'leader'
+            self.leader_address = self.server_address
+            print(f"[DEBUG] Server {self.server_id} became the leader due to no active lower-ID servers")
+            self.send_heartbeats()
+        
+    def is_peer_alive(self, peer_address):
+        try:
+            # Send a "ping" message to the peer
+            self.sock.sendto("ping".encode(), peer_address)
+            print(f"[DEBUG] Server {self.server_id} sent ping to {peer_address}")
+            
+            # Set a timeout for receiving the response
+            self.sock.settimeout(1)
+            
+            # Wait for the response
+            response, _ = self.sock.recvfrom(1024)
+            
+            # Check if the response is "pong"
+            if response.decode() == "pong":
+                print(f"[DEBUG] Server {self.server_id} received pong from {peer_address}")
+                return True
+        except socket.timeout:
+            print(f"[DEBUG] Server {self.server_id} timed out waiting for response from {peer_address}")
+        return False
+
 
     def request_vote(self, peer, term, candidate_id):
         message = f"request_vote:{term}:{candidate_id}"
@@ -259,37 +294,22 @@ class LockManagerServer:
             message = f"heartbeat:{self.term}:{self.server_id}"
             for peer in self.peers:
                 self.sock.sendto(message.encode(), peer)
-            print(f"[DEBUG] Leader {self.server_id} sent heartbeat")  # Add this line for confirmation
-            time.sleep(0.5)
+            time.sleep(1)
 
     def save_state(self):
-        """Save the current lock state to a JSON file for persistence."""
         state = {
             "current_lock_holder": self.current_lock_holder,
             "lock_expiration_time": self.lock_expiration_time
         }
-        try:
-            with open(STATE_FILE, "w") as f:
-                json.dump(state, f)
-            print("[DEBUG] Server state saved successfully.")
-        except IOError as e:
-            print(f"[ERROR] Failed to save state: {e}")
+        with open(STATE_FILE, "w") as f:
+            json.dump(state, f)
 
     def load_state(self):
-        """Load the lock state from a JSON file, if it exists."""
         if os.path.exists(STATE_FILE):
-            try:
-                with open(STATE_FILE, "r") as f:
-                    state = json.load(f)
-                self.current_lock_holder = state.get("current_lock_holder")
-                self.lock_expiration_time = state.get("lock_expiration_time")
-                print("[DEBUG] Server state loaded successfully.")
-            except IOError as e:
-                print(f"[ERROR] Failed to load state: {e}")
-            except json.JSONDecodeError as e:
-                print(f"[ERROR] Failed to decode state file: {e}")
-        else:
-            print("[DEBUG] No state file found. Starting with default state.")
+            with open(STATE_FILE, "r") as f:
+                state = json.load(f)
+            self.current_lock_holder = state.get("current_lock_holder")
+            self.lock_expiration_time = state.get("lock_expiration_time")
 
 if __name__ == "__main__":
     server = LockManagerServer()

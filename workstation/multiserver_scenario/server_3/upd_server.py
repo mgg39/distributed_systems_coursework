@@ -61,7 +61,7 @@ class LockManagerServer:
         while True:
             data, client_address = self.sock.recvfrom(1024)  # Blocking mode for client requests
             threading.Thread(target=self.handle_request, args=(data, client_address)).start()
-    
+
     def handle_messages(self):
         while True:
             try:
@@ -109,7 +109,6 @@ class LockManagerServer:
             self.last_heartbeat = time.time()
             print(f"[DEBUG] Voted for candidate {candidate_id} for term {term}")
 
-    #----------Replica logic---------------
     def sync_lock_state(self, lock_data):
         # Synchronize lock state from leader
         with self.lock:
@@ -127,7 +126,6 @@ class LockManagerServer:
             f.flush()
             os.fsync(f.fileno())
         print(f"[DEBUG] Synchronized file {file_name} with data: {file_data} on follower")
-    #----------Replica logic---------------
 
     def acquire_lock(self, client_id):
         if self.role == 'leader':
@@ -154,14 +152,6 @@ class LockManagerServer:
             else:
                 return "You do not hold the lock"
 
-    def renew_lease(self, client_id):
-        with self.lock:
-            if self.current_lock_holder == client_id:
-                self.lock_expiration_time = time.time() + LOCK_LEASE_DURATION
-                return "lease renewed"
-            else:
-                return "You do not hold the lock"
-
     def append_to_file(self, client_id, file_name, data):
         if self.current_lock_holder == client_id:
             file_path = os.path.join(FILES_DIR, file_name)
@@ -170,14 +160,26 @@ class LockManagerServer:
                     f.write(data + "\n")
                     f.flush()
                     os.fsync(f.fileno())
-                self.notify_followers_file_update(file_name, data)
-                return "append success"
+                
+                # Notify followers and wait for acknowledgment
+                success_count = 0
+                for peer in self.peers:
+                    message = f"file_update:{file_name}:{data}"
+                    self.sock.sendto(message.encode(), peer)
+                    # Wait for acknowledgment from followers
+                    ack, _ = self.sock.recvfrom(1024)
+                    if ack.decode() == "ack":
+                        success_count += 1
+
+                # Ensure majority of followers have synchronized the update
+                if success_count > len(self.peers) // 2:
+                    return "append success"
+                else:
+                    return "Failed to synchronize with followers"
             else:
                 return "File not found"
         else:
             return "You do not hold the lock"
-        
-    #----------Replica logic---------------
 
     def notify_followers_file_update(self, file_name, file_data):
         print(f"[DEBUG] Leader sending file update for {file_name} with data: {file_data}")
@@ -194,9 +196,6 @@ class LockManagerServer:
             message = f"lock_state:{lock_data}"
             self.sock.sendto(message.encode(), peer)
 
-    #----------Replica logic---------------
-
-
     def monitor_lock_expiration(self):
         while True:
             with self.lock:
@@ -205,7 +204,7 @@ class LockManagerServer:
                     self.lock_expiration_time = None
                     self.save_state()
             time.sleep(1)
-    
+
     def handle_request(self, data, client_address):
         message = data.decode()
         if message.startswith("acquire_lock"):
@@ -237,54 +236,34 @@ class LockManagerServer:
                 print(f"[DEBUG] Server {self.server_id} detected leader failure, starting election")
                 self.start_election()
             time.sleep(0.1)
-    
+
     def start_election(self):
-        # Only start an election if this server isn't already the leader
         if self.role == 'leader':
             return
-
-        # Assume this server will be the leader unless a lower-ID server is found to be active
         lowest_active_peer_found = False
-
-        # Check each lower-ID server to see if it's alive
         for peer_id, peer_address in sorted([(i+1, p) for i, p in enumerate(self.peers)]):
             if peer_id < self.server_id:
-                # Ping each lower-ID peer to check if they are still alive
                 if self.is_peer_alive(peer_address):
-                    # If an active lower-ID server is found, this server should not be the leader
                     self.role = 'follower'
                     self.leader_address = peer_address
                     print(f"[DEBUG] Server {self.server_id} defers to active lower-ID leader: Server {peer_id}")
                     lowest_active_peer_found = True
                     break
-
-        # If no active lower-ID servers were found, this server becomes the leader
         if not lowest_active_peer_found:
             self.role = 'leader'
             self.leader_address = self.server_address
-            print(f"[DEBUG] Server {self.server_id} became the leader due to no active lower-ID servers")
+            print(f"[DEBUG] Server {self.server_id} became the leader")
             self.send_heartbeats()
-        
+
     def is_peer_alive(self, peer_address):
         try:
-            # Send a "ping" message to the peer
             self.sock.sendto("ping".encode(), peer_address)
-            print(f"[DEBUG] Server {self.server_id} sent ping to {peer_address}")
-            
-            # Set a timeout for receiving the response
             self.sock.settimeout(1)
-            
-            # Wait for the response
             response, _ = self.sock.recvfrom(1024)
-            
-            # Check if the response is "pong"
             if response.decode() == "pong":
-                print(f"[DEBUG] Server {self.server_id} received pong from {peer_address}")
                 return True
         except socket.timeout:
-            print(f"[DEBUG] Server {self.server_id} timed out waiting for response from {peer_address}")
-        return False
-
+            return False
 
     def request_vote(self, peer, term, candidate_id):
         message = f"request_vote:{term}:{candidate_id}"
