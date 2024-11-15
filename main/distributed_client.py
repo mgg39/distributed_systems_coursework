@@ -5,7 +5,7 @@ from rpc_connection import RPCConnection
 import urllib.parse
 
 class DistributedClient:
-    def __init__(self, client_id, replicas):
+    def __init__(self, client_id, servers):
         self.client_id = client_id
         self.servers = servers  # List of known server addresses (host, port)
         self.current_leader = None
@@ -176,6 +176,7 @@ class DistributedClient:
             self.connection.close()
         print(f"{self.client_id}: Connection closed.")
 
+
 if __name__ == "__main__":
     # List of known server addresses
     servers = [('localhost', 8080), ('localhost', 8082), ('localhost', 8084)]
@@ -227,3 +228,4 @@ if __name__ == "__main__":
     thread3.join()
 
     print("All clients have completed their operations.")
+
