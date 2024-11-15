@@ -1,4 +1,3 @@
-#TODO: fix post 1 collapse election
 import socket
 import time
 import threading
@@ -177,6 +176,7 @@ class DistributedClient:
             self.connection.close()
         print(f"{self.client_id}: Connection closed.")
 
+"""
 if __name__ == "__main__":
     # List of known server addresses
     servers = [('localhost', 8080), ('localhost', 8082), ('localhost', 8084)]
@@ -184,6 +184,7 @@ if __name__ == "__main__":
     # Create two clients
     client1 = DistributedClient("client_1", servers)
     client2 = DistributedClient("client_2", servers)
+    client3 = DistributedClient("client_2", servers)
 
     def client_task(client, file_name, data):
         try:
@@ -212,16 +213,20 @@ if __name__ == "__main__":
             client.close()
 
     # Create threads for each client to simulate simultaneous operations
-    thread1 = threading.Thread(target=client_task, args=(client1, "file_1", "A"))
-    thread2 = threading.Thread(target=client_task, args=(client2, "file_1", "B"))
+    thread1 = threading.Thread(target=client_task, args=(client1, "file_1", "1"))
+    thread2 = threading.Thread(target=client_task, args=(client2, "file_1", "2"))
+    thread3 = threading.Thread(target=client_task, args=(client2, "file_1", "3"))
 
     # Start the threads
     thread1.start()
     thread2.start()
+    thread3.start()
 
     # Wait for both threads to finish
     thread1.join()
     thread2.join()
+    thread3.join()
 
-    print("Both clients have completed their operations.")
+    print("All clients have completed their operations.")
 
+"""
