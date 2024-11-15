@@ -1,3 +1,4 @@
+#TODO: fix post 1 collapse election
 import socket
 import time
 import threading
@@ -106,15 +107,24 @@ class DistributedClient:
         if not self.current_leader and not self.find_leader():
             return "Leader not found"
         
-        response = self.connection.rpc_send(f"{message_type}:{self.client_id}:{self.next_request_id()}:{urllib.parse.quote(additional_info)}")
+        # Handle append_file specifically without URL encoding
+        if message_type == "append_file":
+            message = f"{message_type}:{self.client_id}:{self.next_request_id()}:{additional_info}"
+        else:
+            message = f"{message_type}:{self.client_id}:{self.next_request_id()}:{urllib.parse.quote(additional_info)}"
+        
+        response = self.connection.rpc_send(message)
+        
         if response.startswith("Redirect to leader"):
             if not self.find_leader():
                 return "Leader redirect failed"
-            return self.send_message(message_type, additional_info)
+            return self.send_message(message_type, additional_info)  # Retry with updated leader
+        
         return response
 
     def append_file(self, file_name, data):
         if self.lock_acquired:
+            # Format the message with file_name and data
             response = self.send_message("append_file", f"{file_name}:{data}")
             
             if response == "append success":

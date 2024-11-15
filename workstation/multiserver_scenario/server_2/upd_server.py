@@ -234,7 +234,7 @@ class LockManagerServer:
             client_id = message.split(":")[1]
             response = self.release_lock(client_id)
         elif message.startswith("append_file"):
-            client_id, file_name, file_data = message.split(":")[1:4]
+            client_id, request_id, file_name, file_data = message.split(":")[1:5]
             response = self.append_to_file(client_id, file_name, file_data)
         elif message.startswith("identify_leader"):
             if self.role == 'leader':
@@ -251,14 +251,14 @@ class LockManagerServer:
 
         print(f"[DEBUG] Sending response: {response} to {client_address}")
         self.sock.sendto(response.encode(), client_address)
-
+    
     def heartbeat_check(self):
         while True:
             if self.role == 'follower' and (time.time() - self.last_heartbeat) > self.election_timeout:
                 print(f"[DEBUG] Server {self.server_id} detected leader failure, starting election")
                 self.start_election()
             time.sleep(0.1)
-
+    
     def start_election(self):
         # Only start an election if this server isn't already the leader
         if self.role == 'leader':

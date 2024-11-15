@@ -234,7 +234,7 @@ class LockManagerServer:
             client_id = message.split(":")[1]
             response = self.release_lock(client_id)
         elif message.startswith("append_file"):
-            client_id, file_name, file_data = message.split(":")[1:4]
+            client_id, request_id, file_name, file_data = message.split(":")[1:5]
             response = self.append_to_file(client_id, file_name, file_data)
         elif message.startswith("identify_leader"):
             if self.role == 'leader':
