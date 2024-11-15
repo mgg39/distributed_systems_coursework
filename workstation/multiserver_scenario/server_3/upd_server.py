@@ -27,7 +27,6 @@ class LockManagerServer:
         self.leader_address = self.server_address if self.role == 'leader' else None
         self.last_heartbeat = time.time()
         self.election_timeout = random.uniform(1, 2)
-        self.term = 0
 
         # Initialize UDP socket for client requests
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -70,14 +69,8 @@ class LockManagerServer:
                 parts = message.split(":")
 
                 if parts[0] == "heartbeat":
-                    term = int(parts[1])
-                    leader_id = int(parts[2])
-                    self.process_heartbeat(term, leader_id)
-
-                elif parts[0] == "request_vote":
-                    term = int(parts[1])
-                    candidate_id = int(parts[2])
-                    self.process_vote_request(term, candidate_id, addr)
+                    leader_id = int(parts[1])
+                    self.process_heartbeat(leader_id)
 
                 elif parts[0] == "lock_state":
                     lock_data = parts[1]
@@ -108,35 +101,12 @@ class LockManagerServer:
             except Exception as e:
                 print(f"[ERROR] handle_messages error: {e}")
     
-    def process_heartbeat(self, term, leader_id):
-        if term > self.term:
-            # Update to the new term and follow the current leader
-            self.term = term
+    def process_heartbeat(self, leader_id):
+        if leader_id < self.server_id:
             self.role = 'follower'
             self.leader_address = self.peers[leader_id - 1]
             self.last_heartbeat = time.time()
-            print(f"[DEBUG] Server {self.server_id} received heartbeat from leader {leader_id} with higher term {term}, stepping down.")
-        elif term == self.term:
-            # If term is the same but this server is also a leader, step down
-            if self.role == 'leader':
-                print(f"[DEBUG] Server {self.server_id} stepping down from leadership due to equivalent term heartbeat from {leader_id}.")
-                self.role = 'follower'
-            print(f"[DEBUG] Server {self.server_id} received heartbeat from leader {leader_id}.")
-            self.leader_address = self.peers[leader_id - 1]
-            self.last_heartbeat = time.time()
-        else:
-            # Ignore heartbeats with a lower term
-            print(f"[DEBUG] Server {self.server_id} ignoring heartbeat from leader {leader_id} with lower term {term}.")
-
-
-    def process_vote_request(self, term, candidate_id, addr):
-        if term > self.term:
-            self.term = term
-            self.voted_for = candidate_id
-            self.raft_sock.sendto("vote_granted".encode(), addr)
-            self.role = 'follower'
-            self.last_heartbeat = time.time()
-            print(f"[DEBUG] Voted for candidate {candidate_id} for term {term}")
+            print(f"[DEBUG] Server {self.server_id} following leader {leader_id}.")
 
     #----------Replica logic---------------
     def sync_lock_state(self, lock_data):
@@ -298,7 +268,6 @@ class LockManagerServer:
             self.leader_address = self.server_address
             print(f"[DEBUG] Server {self.server_id} became the leader due to no active lower-ID servers")
             self.send_heartbeats()
-
         
     def is_peer_alive(self, peer_address):
         try:
@@ -321,13 +290,9 @@ class LockManagerServer:
         return False
 
 
-    def request_vote(self, peer, term, candidate_id):
-        message = f"request_vote:{term}:{candidate_id}"
-        self.sock.sendto(message.encode(), peer)
-
     def send_heartbeats(self):
         while self.role == 'leader':
-            message = f"heartbeat:{self.term}:{self.server_id}"
+            message = f"heartbeat:{self.server_id}"
             for peer in self.peers:
                 print(f"[DEBUG] Sending heartbeat to {peer}")
                 self.sock.sendto(message.encode(), peer)
