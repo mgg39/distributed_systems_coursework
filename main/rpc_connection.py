@@ -24,8 +24,8 @@ class RPCConnection:
                 attempt += 1
                 if attempt > self.retries:
                     return "Timeout: No response after retries"
-                time.sleep(backoff_time)
-                backoff_time *= 2  # Exponential backoff
+                time.sleep(self.backoff)
+                backoff_time *= 2
             except Exception as e:
                 print(f"Attempt {attempt+1}: Error - {e}")
                 attempt += 1

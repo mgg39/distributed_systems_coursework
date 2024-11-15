@@ -12,6 +12,7 @@ class RPCConnection:
 
     def rpc_send(self, message):
         attempt = 0
+        backoff_time = self.backoff
         while attempt <= self.retries:
             try:
                 print(f"Attempt {attempt+1}: Sending '{message}' to {self.server_address}")
@@ -24,6 +25,7 @@ class RPCConnection:
                 if attempt > self.retries:
                     return "Timeout: No response after retries"
                 time.sleep(self.backoff)
+                backoff_time *= 2
             except Exception as e:
                 print(f"Attempt {attempt+1}: Error - {e}")
                 attempt += 1
