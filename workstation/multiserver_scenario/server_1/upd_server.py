@@ -108,12 +108,25 @@ class LockManagerServer:
                 print(f"[ERROR] handle_messages error: {e}")
     
     def process_heartbeat(self, term, leader_id):
-        if term >= self.term:
+        if term > self.term:
+            # Update to the new term and follow the current leader
             self.term = term
             self.role = 'follower'
             self.leader_address = self.peers[leader_id - 1]
             self.last_heartbeat = time.time()
-            print(f"[DEBUG] Received heartbeat from leader {leader_id}")
+            print(f"[DEBUG] Server {self.server_id} received heartbeat from leader {leader_id} with higher term {term}, stepping down.")
+        elif term == self.term:
+            # If term is the same but this server is also a leader, step down
+            if self.role == 'leader':
+                print(f"[DEBUG] Server {self.server_id} stepping down from leadership due to equivalent term heartbeat from {leader_id}.")
+                self.role = 'follower'
+            print(f"[DEBUG] Server {self.server_id} received heartbeat from leader {leader_id}.")
+            self.leader_address = self.peers[leader_id - 1]
+            self.last_heartbeat = time.time()
+        else:
+            # Ignore heartbeats with a lower term
+            print(f"[DEBUG] Server {self.server_id} ignoring heartbeat from leader {leader_id} with lower term {term}.")
+
 
     def process_vote_request(self, term, candidate_id, addr):
         if term > self.term:
@@ -260,14 +273,13 @@ class LockManagerServer:
             time.sleep(0.1)
     
     def start_election(self):
-        # Only start an election if this server isn't already the leader
         if self.role == 'leader':
-            return
+            return  # Do nothing if already a leader
 
-        # Assume this server will be the leader unless a lower-ID server is found to be active
+        # Initialize the flag
         lowest_active_peer_found = False
 
-        # Check each lower-ID server to see if it's alive
+        # Check each lower-ID server to see if it’s alive
         for peer_id, peer_address in sorted([(i+1, p) for i, p in enumerate(self.peers)]):
             if peer_id < self.server_id:
                 # Ping each lower-ID peer to check if they are still alive
@@ -315,6 +327,7 @@ class LockManagerServer:
         while self.role == 'leader':
             message = f"heartbeat:{self.term}:{self.server_id}"
             for peer in self.peers:
+                print(f"[DEBUG] Sending heartbeat to {peer}")
                 self.sock.sendto(message.encode(), peer)
             time.sleep(1)
 
