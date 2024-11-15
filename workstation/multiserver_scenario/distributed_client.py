@@ -1,6 +1,7 @@
 import socket
 import time
 import threading
+import random
 from rpc_connection import RPCConnection
 import urllib.parse
 
@@ -62,6 +63,8 @@ class DistributedClient:
     def send_lease_check(self):
         while True:
             if self.lock_acquired:
+                # Add random delay before renewing the lease to reduce collision
+                time.sleep(random.uniform(0.5, 1.5))
                 # Send lease renewal check if lock is currently held
                 response = self.send_message("client_lease_check")
                 if response != "lease renewed":
@@ -79,10 +82,10 @@ class DistributedClient:
                 else:
                     print(f"{self.client_id}: Lock acquisition failed or unexpected response - {response}")
                     break
-            # Wait for a third of the lease duration if lock held, otherwise check every second
+            # Sleep for a portion of the lease duration if lock held, otherwise check every second
             time.sleep(self.lease_duration / 3 if self.lock_acquired else 1)
 
-    def acquire_lock(self, max_retries=5, base_interval=0.5):
+    def acquire_lock(self, max_retries=15, base_interval=1):
         retry_interval = base_interval
         for attempt in range(max_retries):
             response = self.send_message("acquire_lock_request")
@@ -90,19 +93,16 @@ class DistributedClient:
                 self.lock_acquired = True
                 _, lease_duration_str = response.split(":")
                 self.lease_duration = int(lease_duration_str)
-                threading.Thread(target=self.send_lease_check, daemon=True).start()  # Start lease checks
+                threading.Thread(target=self.send_lease_check, daemon=True).start()
                 print(f"{self.client_id}: Lock acquired with lease duration of {self.lease_duration} seconds.")
                 return True
-            elif "Request for lock" in response:
-                print(f"{self.client_id}: Lock request added to the queue.")
-                threading.Thread(target=self.send_lease_check, daemon=True).start()  # Start lease checks in queue
-                return True
-            elif response == "Lock is currently held":
-                print(f"{self.client_id}: Lock is held, retrying after {retry_interval} seconds...")
+            elif response in ["Request for lock added to queue", "Lock is still pending"]:
+                print(f"{self.client_id}: Lock request pending. Retrying in {retry_interval} seconds...")
+                time.sleep(retry_interval + random.uniform(0.1, 0.5))  # Random backoff
             else:
                 print(f"{self.client_id}: Failed to acquire lock - {response}")
-            time.sleep(retry_interval)
-            retry_interval *= 2
+                return False
+        print(f"{self.client_id}: Lock acquisition failed after retries.")
         return False
 
     def send_message(self, message_type, additional_info=""):
@@ -127,17 +127,28 @@ class DistributedClient:
             self.lock_acquired = False  # Mark lock as expired
             print(f"{self.client_id}: Lock lease expired")
 
+    def release_lock(self, client_id):
+        with self.lock:  # Thread-safe access
+            if self.current_lock_holder == client_id:
+                print(f"[DEBUG] Lock released by {client_id}")
+                self.current_lock_holder = None
+                self.lock_expiration_time = None
 
-    def release_lock(self):
-        if self.lock_acquired:
-            response = self.send_message("release_lock")
-            if response == "unlock success":
-                self.lock_acquired = False
-                print(f"{self.client_id}: Lock released successfully.")
+                # Grant lock to the next client in queue
+                if self.lock_queue:
+                    next_client = self.lock_queue.pop(0)  # Remove the first client in queue
+                    print(f"[DEBUG] Granting lock to next client in queue: {next_client}")
+                    self.current_lock_holder = next_client
+                    self.lock_expiration_time = time.time() + LOCK_LEASE_DURATION
+                    self.notify_followers_lock_state()
+                    # Notify the next client
+                    return f"grant lock:{LOCK_LEASE_DURATION}"
+                
+                self.save_state()
+                return "unlock success"
             else:
-                print(f"{self.client_id}: Failed to release lock - {response}")
-        else:
-            print(f"{self.client_id}: Cannot release lock - lock not held by this client.")
+                print(f"[ERROR] {client_id} tried to release a lock it does not hold.")
+                return "You do not hold the lock"
 
     def send_heartbeat(self):
         while self.lock_acquired:
@@ -172,56 +183,72 @@ class DistributedClient:
             self.connection.close()
         print(f"{self.client_id}: Connection closed.")
 
-def test_distributed_client():
-    # Step 1: Define the server addresses
-    servers = [('localhost', 8080), ('localhost', 8081), ('localhost', 8082)]
-    client = DistributedClient("client_1", servers)
-    
+def client_task(client_id, servers, file_name, data):
+    """
+    Task for a client to acquire a lock, append data, and release the lock.
+    """
+    client = DistributedClient(client_id, servers)
     try:
-        print("[TEST] Starting distributed client test...")
+        print(f"[{client_id}] Starting task...")
         
-        # Step 2: Find the leader
+        # Step 1: Find the leader
         if not client.find_leader():
-            print("[TEST] Failed to find a leader. Test aborted.")
+            print(f"[{client_id}] Failed to find a leader. Exiting.")
             return
         
-        # Step 3: Acquire the lock
-        print("[TEST] Attempting to acquire the lock...")
+        # Step 2: Attempt to acquire the lock
+        print(f"[{client_id}] Attempting to acquire the lock...")
         if client.acquire_lock():
-            print("[TEST] Lock acquired successfully.")
+            print(f"[{client_id}] Lock acquired successfully.")
+            
+            # Step 3: Append data to the file
+            print(f"[{client_id}] Attempting to append '{data}' to {file_name}...")
+            append_result = client.append_file(file_name, data)
+            if append_result == "append success":
+                print(f"[{client_id}] Data '{data}' appended successfully.")
+            elif append_result == "replication failed":
+                print(f"[{client_id}] Data '{data}' appended locally but failed to replicate to replicas.")
+            else:
+                print(f"[{client_id}] Append operation failed: {append_result}")
+            
+            # Step 4: Release the lock
+            print(f"[{client_id}] Releasing the lock...")
+            client.release_lock()
+            print(f"[{client_id}] Lock released successfully.")
         else:
-            print("[TEST] Failed to acquire the lock after retries. Test aborted.")
-            return
-        
-        # Step 4: Start lease check in the background
-        print("[TEST] Starting lease check in the background...")
-        lease_check_thread = threading.Thread(target=client.send_lease_check, daemon=True)
-        lease_check_thread.start()
-
-        # Step 5: Append data to a file
-        print("[TEST] Attempting to append data to file...")
-        append_result = client.append_file("file_1", "This is a test log entry.")
-        if append_result == "append success":
-            print("[TEST] Data appended successfully.")
-        elif append_result == "replication failed":
-            print("[TEST] Data appended locally but failed to replicate to replicas.")
-        else:
-            print(f"[TEST] Append operation failed with response: {append_result}")
-        
-        # Step 6: Release the lock
-        print("[TEST] Releasing the lock...")
-        client.release_lock()
-        print("[TEST] Lock released successfully.")
+            print(f"[{client_id}] Failed to acquire the lock.")
     
     except Exception as e:
-        print(f"[TEST] Exception occurred: {e}")
+        print(f"[{client_id}] Exception occurred: {e}")
     
     finally:
-        # Step 7: Close the connection
-        print("[TEST] Closing the client connection...")
+        # Step 5: Close the connection
+        print(f"[{client_id}] Closing connection...")
         client.close()
-        print("[TEST] Client shut down.")
+        print(f"[{client_id}] Task completed.")
+
+def test_simultaneous_clients():
+    # Define the server addresses
+    servers = [('localhost', 8080), ('localhost', 8081), ('localhost', 8082)]
+    
+    # File and data to append
+    file_name = "file_1"
+    client_1_data = "A"
+    client_2_data = "B"
+    
+    # Create threads for both clients
+    client_1_thread = threading.Thread(target=client_task, args=("client_1", servers, file_name, client_1_data))
+    client_2_thread = threading.Thread(target=client_task, args=("client_2", servers, file_name, client_2_data))
+    
+    # Start both threads simultaneously
+    client_1_thread.start()
+    client_2_thread.start()
+    
+    # Wait for both threads to complete
+    client_1_thread.join()
+    client_2_thread.join()
+    print("[TEST] Both clients have completed their tasks.")
 
 # Run the test
 if __name__ == "__main__":
-    test_distributed_client()
+    test_simultaneous_clients()

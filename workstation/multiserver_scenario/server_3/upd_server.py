@@ -67,6 +67,12 @@ class LockManagerServer:
             data, client_address = self.sock.recvfrom(1024)  # Blocking mode for client requests
             threading.Thread(target=self.handle_request, args=(data, client_address)).start()
     
+    def debug_queue_state(self):
+        print(f"[DEBUG] Current lock holder: {self.current_lock_holder}")
+        print(f"[DEBUG] Lock expiration time: {self.lock_expiration_time}")
+        print(f"[DEBUG] Lock queue size: {self.request_queue.qsize()}")
+
+    
     def handle_messages(self):
         while True:
             try:
@@ -148,8 +154,9 @@ class LockManagerServer:
                     self.request_queue.put(client_id)
                     print(f"[DEBUG] {client_id} added to lock request queue.")
                     return f"Request for lock by {client_id} added to the queue."
+            debug_queue_state(self)
         else:
-            return f"Redirect to leader at {self.leader_address}"
+            return f"Redirect to leader at {self.leader_address}" 
         
     def process_lock_queue(self):
         with self.processing_lock:
@@ -157,8 +164,15 @@ class LockManagerServer:
                 client_id = self.request_queue.get()  # Get the next client in line
                 self.current_lock_holder = client_id
                 self.lock_expiration_time = time.time() + LOCK_LEASE_DURATION
+                if hasattr(self, "renewal_count"):
+                    self.renewal_count[client_id] = 0  # Reset renewal count for fairness
                 print(f"[DEBUG] Lock granted to {client_id} from queue with lease duration of {LOCK_LEASE_DURATION} seconds.")
-                # Notify the client (client will use lease check to confirm)
+                self.notify_followers_lock_state()
+            elif self.current_lock_holder:
+                print(f"[DEBUG] Lock is still held by {self.current_lock_holder}.")
+            else:
+                print(f"[DEBUG] Lock queue is empty.")
+        self.debug_queue_state()
 
 
     def release_lock(self, client_id):
@@ -167,6 +181,7 @@ class LockManagerServer:
                 self.current_lock_holder = None
                 self.lock_expiration_time = None
                 self.save_state()
+                debug_queue_state(self)
                 return "unlock success"
             else:
                 return "You do not hold the lock"
@@ -174,10 +189,25 @@ class LockManagerServer:
     def renew_lease(self, client_id):
         with self.lock:
             if self.current_lock_holder == client_id:
+                # Limit renewals
+                if not hasattr(self, "renewal_count"):
+                    self.renewal_count = defaultdict(int)
+                self.renewal_count[client_id] += 1
+                
+                # Allow only 3 renewals per client for fairness
+                if self.renewal_count[client_id] > 3:
+                    print(f"[DEBUG] Client {client_id} exceeded lease renewal limit. Releasing lock.")
+                    self.current_lock_holder = None
+                    self.lock_expiration_time = None
+                    self.renewal_count[client_id] = 0
+                    threading.Thread(target=self.process_lock_queue, daemon=True).start()
+                    return "lease limit exceeded"
+                
                 self.lock_expiration_time = time.time() + LOCK_LEASE_DURATION
                 return "lease renewed"
             else:
                 return "You do not hold the lock"
+
 
     def append_to_file(self, client_id, file_name, data):
         if self.current_lock_holder == client_id:
@@ -188,15 +218,11 @@ class LockManagerServer:
                     f.flush()
                     os.fsync(f.fileno())
                 self.notify_followers_file_update(file_name, data)
-                print(f"[DEBUG] Data appended to {file_name} by {client_id}")
                 return "append success"
             else:
-                print(f"[ERROR] File {file_name} not found.")
                 return "File not found"
         else:
-            print(f"[ERROR] Client {client_id} does not hold the lock.")
             return "You do not hold the lock"
-
         
     #----------Replica logic---------------
 
@@ -232,7 +258,6 @@ class LockManagerServer:
 
     #----------Replica logic---------------
 
-
     def monitor_lock_expiration(self):
         while True:
             with self.processing_lock:
@@ -240,7 +265,8 @@ class LockManagerServer:
                     print(f"[DEBUG] Lock expired for client {self.current_lock_holder}")
                     self.current_lock_holder = None
                     self.lock_expiration_time = None
-                    # Process the next client in the queue
+                    # Randomized delay before processing the queue
+                    time.sleep(random.uniform(0.1, 0.5))
                     threading.Thread(target=self.process_lock_queue, daemon=True).start()
             time.sleep(1)
 

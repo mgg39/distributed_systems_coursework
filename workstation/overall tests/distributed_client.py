@@ -59,6 +59,52 @@ class DistributedClient:
         print(f"{self.client_id} - Failed to find leader after {retries} attempts")
         return False
 
+    def send_lease_check(self):
+        while True:
+            if self.lock_acquired:
+                # Send lease renewal check if lock is currently held
+                response = self.send_message("client_lease_check")
+                if response != "lease renewed":
+                    print(f"{self.client_id}: Failed to renew lease, response: {response}")
+                    self.lock_acquired = False  # Mark lock as lost
+                    break
+            else:
+                # Check if lock has been granted to the client from the queue
+                response = self.send_message("client_lease_check")
+                if response == "lease renewed":
+                    print(f"{self.client_id}: Lock acquired via lease check.")
+                    self.lock_acquired = True
+                elif response == "Lock is still pending":
+                    print(f"{self.client_id}: Waiting for lock to be granted...")
+                else:
+                    print(f"{self.client_id}: Lock acquisition failed or unexpected response - {response}")
+                    break
+            # Wait for a third of the lease duration if lock held, otherwise check every second
+            time.sleep(self.lease_duration / 3 if self.lock_acquired else 1)
+
+    def acquire_lock(self, max_retries=5, base_interval=0.5):
+        retry_interval = base_interval
+        for attempt in range(max_retries):
+            response = self.send_message("acquire_lock_request")
+            if response.startswith("grant lock"):
+                self.lock_acquired = True
+                _, lease_duration_str = response.split(":")
+                self.lease_duration = int(lease_duration_str)
+                threading.Thread(target=self.send_lease_check, daemon=True).start()  # Start lease checks
+                print(f"{self.client_id}: Lock acquired with lease duration of {self.lease_duration} seconds.")
+                return True
+            elif "Request for lock" in response:
+                print(f"{self.client_id}: Lock request added to the queue.")
+                threading.Thread(target=self.send_lease_check, daemon=True).start()  # Start lease checks in queue
+                return True
+            elif response == "Lock is currently held":
+                print(f"{self.client_id}: Lock is held, retrying after {retry_interval} seconds...")
+            else:
+                print(f"{self.client_id}: Failed to acquire lock - {response}")
+            time.sleep(retry_interval)
+            retry_interval *= 2
+        return False
+
     def send_message(self, message_type, additional_info=""):
         # Find leader if not set
         if not self.current_leader and not self.find_leader():
@@ -71,25 +117,6 @@ class DistributedClient:
                 return "Leader redirect failed"
             return self.send_message(message_type, additional_info)  # Retry msg to new leader
         return response
-
-    def acquire_lock(self, max_retries=5, base_interval=0.5):  # shorter base interval
-        retry_interval = base_interval
-        for attempt in range(max_retries):
-            response = self.send_message("acquire_lock")
-            if response.startswith("grant lock"):
-                self.lock_acquired = True
-                _, lease_duration_str = response.split(":")
-                self.lease_duration = int(lease_duration_str)
-                threading.Thread(target=self.start_lease_timer, daemon=True).start()
-                print(f"{self.client_id}: Lock acquired with lease duration of {self.lease_duration} seconds.")
-                return True
-            elif response == "Lock is currently held":
-                print(f"{self.client_id}: Lock is held, retrying...")
-            else:
-                print(f"{self.client_id}: Failed to acquire lock - {response}")
-            time.sleep(retry_interval)
-            retry_interval *= 2  # Still exponential but starts with shorter interval
-        return False
 
 
     def start_lease_timer(self):
@@ -145,21 +172,3 @@ class DistributedClient:
             self.connection.close()
         print(f"{self.client_id}: Connection closed.")
 
-"""
-# Example usage
-if __name__ == "__main__":
-    # list of known server addresses
-    servers = [('localhost', 8080), ('localhost', 8081), ('localhost', 8082)]
-    client = DistributedClient("client_1", servers)
-    
-    try:
-        # Try to acquire lock with retries
-        if client.acquire_lock():
-            # Append data to file if lock acquired
-            client.append_file("file_1", "This is a test log entry.")
-    finally:
-        # Ensure lock is released after operations are complete
-        client.release_lock()
-        # Close the connection
-        client.close()
-"""
