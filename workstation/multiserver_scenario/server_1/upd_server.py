@@ -4,6 +4,8 @@ import threading
 import time
 import random
 import json
+import urllib.parse
+from queue import Queue
 from collections import defaultdict
 
 FILES_DIR = "server_files"
@@ -47,6 +49,12 @@ class LockManagerServer:
         if not os.path.exists(STATE_FILE):
             self.save_state()
 
+        # Initialization lock queue
+        self.request_queue = Queue()  # Queue for managing lock requests
+        self.processing_lock = threading.Lock()  # Lock for queue processing
+        self.current_lock_holder = None
+        self.lock_expiration_time = None
+
         # Start threads
         if self.role == 'leader':
             threading.Thread(target=self.send_heartbeats, daemon=True).start()
@@ -74,14 +82,12 @@ class LockManagerServer:
                 elif parts[0] == "lock_state":
                     lock_data = parts[1]
                     self.sync_lock_state(lock_data)
-                    #TODO: respond - aknowledge updates
                     if self.sync_lock_state(lock_data) == True:
                         self.sock.sendto(message.encode(), self.leader_address)
 
                 elif parts[0] == "file_update":
                     file_name, file_data = parts[1], parts[2]
                     self.sync_file(file_name, file_data)
-                    #TODO: respond - aknowledge updates
                     if self.sync_file(lock_data) == True:
                         self.sock.sendto(message.encode(), self.leader_address)
                 
@@ -129,20 +135,31 @@ class LockManagerServer:
         return True
     #----------Replica logic---------------
 
-    def acquire_lock(self, client_id):
+    def acquire_lock_request(self, client_id):
         if self.role == 'leader':
-            with self.lock:
-                current_time = time.time()
-                if not self.current_lock_holder or (self.lock_expiration_time and current_time > self.lock_expiration_time):
+            with self.processing_lock:
+                if not self.current_lock_holder:
+                    # Grant the lock immediately if available
                     self.current_lock_holder = client_id
-                    self.lock_expiration_time = current_time + LOCK_LEASE_DURATION
-                    self.notify_followers_lock_state()
-                    self.save_state()
+                    self.lock_expiration_time = time.time() + LOCK_LEASE_DURATION
+                    print(f"[DEBUG] Lock granted to {client_id} with lease duration of {LOCK_LEASE_DURATION} seconds.")
                     return f"grant lock:{LOCK_LEASE_DURATION}"
                 else:
-                    return "Lock is currently held"
+                    # Add client to queue if lock is held
+                    self.request_queue.put(client_id)
+                    print(f"[DEBUG] {client_id} added to lock request queue.")
+                    return f"Request for lock by {client_id} added to the queue."
         else:
-            return f"Redirect to leader at {self.leader_address}"
+            return f"Redirect to leader at {self.leader_address}" #TODO: does this get processed?
+        
+    def process_lock_queue(self):
+        with self.processing_lock:
+            if not self.current_lock_holder and not self.request_queue.empty():
+                client_id = self.request_queue.get()  # Get the next client in line
+                self.current_lock_holder = client_id
+                self.lock_expiration_time = time.time() + LOCK_LEASE_DURATION
+                print(f"[DEBUG] Lock granted to {client_id} from queue with lease duration of {LOCK_LEASE_DURATION} seconds.")
+                # TODO?:Notify the client (client will use lease check to confirm)
 
     def release_lock(self, client_id):
         with self.lock:
@@ -181,9 +198,24 @@ class LockManagerServer:
 
     def notify_followers_file_update(self, file_name, file_data):
         print(f"[DEBUG] Leader sending file update for {file_name} with data: {file_data}")
+        success = True  # Assume success initially
         for peer in self.peers:
             message = f"file_update:{file_name}:{file_data}"
-            self.sock.sendto(message.encode(), peer)
+            try:
+                self.sock.sendto(message.encode(), peer)
+                # Wait for acknowledgment
+                self.sock.settimeout(2)  # Timeout for receiving acknowledgment
+                response, _ = self.sock.recvfrom(1024)
+                if response.decode() != "ack":
+                    print(f"[DEBUG] Failed acknowledgment from peer {peer}")
+                    success = False
+            except socket.timeout:
+                print(f"[DEBUG] Timeout waiting for acknowledgment from peer {peer}")
+                success = False
+            except Exception as e:
+                print(f"[DEBUG] Error sending update to peer {peer}: {e}")
+                success = False
+        return success
 
     def notify_followers_lock_state(self):
         lock_data = json.dumps({
@@ -199,26 +231,44 @@ class LockManagerServer:
 
     def monitor_lock_expiration(self):
         while True:
-            with self.lock:
+            with self.processing_lock:
                 if self.current_lock_holder and self.lock_expiration_time and time.time() > self.lock_expiration_time:
+                    print(f"[DEBUG] Lock expired for client {self.current_lock_holder}")
                     self.current_lock_holder = None
                     self.lock_expiration_time = None
-                    self.save_state()
+                    # Process the next client in the queue
+                    threading.Thread(target=self.process_lock_queue, daemon=True).start()
             time.sleep(1)
+
+    def process_client_lease_check(self, client_id):
+        if self.current_lock_holder == client_id:
+            self.lock_expiration_time = time.time() + LOCK_LEASE_DURATION
+            return "lease renewed"
+        elif client_id in list(self.request_queue.queue):
+            return "Lock is still pending"
+        else:
+            return "No lock request found"
+
     
     def handle_request(self, data, client_address):
         message = data.decode()
         print(f"[DEBUG] Received request: {message} from {client_address}")
 
-        if message.startswith("acquire_lock"):
+        if message.startswith("acquire_lock_request"):
             client_id = message.split(":")[1]
-            response = self.acquire_lock(client_id)
+            response = self.acquire_lock_request(client_id)
         elif message.startswith("release_lock"):
             client_id = message.split(":")[1]
             response = self.release_lock(client_id)
         elif message.startswith("append_file"):
-            client_id, request_id, file_name, file_data = message.split(":")[1:5]
-            response = self.append_to_file(client_id, file_name, file_data)
+            # Decode the message to handle URL-encoded data
+            decoded_message = urllib.parse.unquote(message)
+            try:
+                client_id, request_id, file_name, file_data = decoded_message.split(":")[1:5]
+                response = self.append_to_file(client_id, file_name, file_data)
+            except ValueError as e:
+                print(f"[ERROR] Failed to parse append_file message: {decoded_message}, error: {e}")
+                response = "Invalid append_file command"
         elif message.startswith("identify_leader"):
             if self.role == 'leader':
                 response = "I am the leader"
@@ -227,13 +277,15 @@ class LockManagerServer:
                     response = f"Redirect to leader:{self.leader_address[0]}:{self.leader_address[1]}"
                 else:
                     response = "Leader unknown"
-        elif message == "ping":
-            response = "pong"
+        elif message.startswith("client_lease_check"):
+            client_id = message.split(":")[1]
+            response = self.process_client_lease_check(client_id)
         else:
             response = "Unknown command"
 
         print(f"[DEBUG] Sending response: {response} to {client_address}")
         self.sock.sendto(response.encode(), client_address)
+
     
     def heartbeat_check(self):
         while True:
@@ -296,6 +348,19 @@ class LockManagerServer:
                 print(f"[DEBUG] Sending heartbeat to {peer}")
                 self.sock.sendto(message.encode(), peer)
             time.sleep(1)
+    
+    def process_leader_heartbeat(self, leader_id, term):
+        # Logic for handling leader heartbeat and updating leader information
+        print(f"[DEBUG] Received heartbeat from leader {leader_id} with term {term}")
+        if term > self.term:
+            self.term = term
+            self.role = 'follower'
+            self.current_leader = leader_id
+            self.last_heartbeat = time.time()
+            print(f"[DEBUG] Updated leader to {leader_id} with term {term}")
+        elif term == self.term:
+            self.last_heartbeat = time.time()  # Renew last heartbeat time
+        # Ignore heartbeats with a lower term
 
     def save_state(self):
         state = {

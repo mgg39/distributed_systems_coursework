@@ -2,14 +2,15 @@ import socket
 import os
 import threading
 import time
-import random
-import json
 from collections import defaultdict
+import urllib.parse
+import json
+import random
 
 FILES_DIR = "server_files"
 NUM_FILES = 100
 LOCK_LEASE_DURATION = 20  # Lease duration in seconds
-STATE_FILE = os.path.join(os.path.dirname(__file__), "server_state_1.json")
+STATE_FILE = os.path.join(os.path.dirname(__file__), "server_state_3.json")
 
 # Ensure the files directory exists and create 100 files
 if not os.path.exists(FILES_DIR):
@@ -18,7 +19,7 @@ for i in range(NUM_FILES):
     open(os.path.join(FILES_DIR, f"file_{i}"), 'a').close()
 
 class LockManagerServer:
-    def __init__(self, host='localhost', port=8080, server_id=1, peers=[("localhost", 8083), ("localhost", 8085)]):
+    def __init__(self, host='localhost', port=8080, server_id=1, peers=[]):
         self.server_address = (host, port)
         self.server_id = server_id
         self.peers = peers
@@ -26,7 +27,6 @@ class LockManagerServer:
         self.leader_address = self.server_address if self.role == 'leader' else None
         self.last_heartbeat = time.time()
         self.election_timeout = random.uniform(1, 2)
-        self.term = 0
 
         # Initialize UDP socket for client requests
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -69,50 +69,42 @@ class LockManagerServer:
                 parts = message.split(":")
 
                 if parts[0] == "heartbeat":
-                    term = int(parts[1])
-                    leader_id = int(parts[2])
-                    self.process_heartbeat(term, leader_id)
-
-                elif parts[0] == "request_vote":
-                    term = int(parts[1])
-                    candidate_id = int(parts[2])
-                    self.process_vote_request(term, candidate_id, addr)
+                    leader_id = int(parts[1])
+                    self.process_heartbeat(leader_id)
 
                 elif parts[0] == "lock_state":
                     lock_data = parts[1]
                     self.sync_lock_state(lock_data)
-                    #TODO: respond - aknowledge updates
                     if self.sync_lock_state(lock_data) == True:
                         self.sock.sendto(message.encode(), self.leader_address)
 
                 elif parts[0] == "file_update":
                     file_name, file_data = parts[1], parts[2]
                     self.sync_file(file_name, file_data)
-                    #TODO: respond - aknowledge updates
                     if self.sync_file(lock_data) == True:
                         self.sock.sendto(message.encode(), self.leader_address)
-
+                
+                elif message == "identify_leader":
+                    if self.role == 'leader':
+                        response = "I am the leader"
+                    else:
+                        if self.leader_address:
+                            response = f"Redirect to leader:{self.leader_address[0]}:{self.leader_address[1]}"
+                        else:
+                            response = "Leader unknown"
+                    self.sock.sendto(response.encode(), client_address)
+                    
             except socket.timeout:
                 continue
             except Exception as e:
                 print(f"[ERROR] handle_messages error: {e}")
     
-    def process_heartbeat(self, term, leader_id):
-        if term >= self.term:
-            self.term = term
+    def process_heartbeat(self, leader_id):
+        if leader_id < self.server_id:
             self.role = 'follower'
             self.leader_address = self.peers[leader_id - 1]
             self.last_heartbeat = time.time()
-            print(f"[DEBUG] Received heartbeat from leader {leader_id}")
-
-    def process_vote_request(self, term, candidate_id, addr):
-        if term > self.term:
-            self.term = term
-            self.voted_for = candidate_id
-            self.raft_sock.sendto("vote_granted".encode(), addr)
-            self.role = 'follower'
-            self.last_heartbeat = time.time()
-            print(f"[DEBUG] Voted for candidate {candidate_id} for term {term}")
+            print(f"[DEBUG] Server {self.server_id} following leader {leader_id}.")
 
     #----------Replica logic---------------
     def sync_lock_state(self, lock_data):
@@ -188,9 +180,24 @@ class LockManagerServer:
 
     def notify_followers_file_update(self, file_name, file_data):
         print(f"[DEBUG] Leader sending file update for {file_name} with data: {file_data}")
+        success = True  # Assume success initially
         for peer in self.peers:
             message = f"file_update:{file_name}:{file_data}"
-            self.sock.sendto(message.encode(), peer)
+            try:
+                self.sock.sendto(message.encode(), peer)
+                # Wait for acknowledgment
+                self.sock.settimeout(2)  # Timeout for receiving acknowledgment
+                response, _ = self.sock.recvfrom(1024)
+                if response.decode() != "ack":
+                    print(f"[DEBUG] Failed acknowledgment from peer {peer}")
+                    success = False
+            except socket.timeout:
+                print(f"[DEBUG] Timeout waiting for acknowledgment from peer {peer}")
+                success = False
+            except Exception as e:
+                print(f"[DEBUG] Error sending update to peer {peer}: {e}")
+                success = False
+        return success
 
     def notify_followers_lock_state(self):
         lock_data = json.dumps({
@@ -215,29 +222,33 @@ class LockManagerServer:
     
     def handle_request(self, data, client_address):
         message = data.decode()
+        print(f"[DEBUG] Received request: {message} from {client_address}")
+
         if message.startswith("acquire_lock"):
             client_id = message.split(":")[1]
             response = self.acquire_lock(client_id)
-            self.sock.sendto(response.encode(), client_address)
-        
         elif message.startswith("release_lock"):
             client_id = message.split(":")[1]
             response = self.release_lock(client_id)
-            self.sock.sendto(response.encode(), client_address)
-
         elif message.startswith("append_file"):
-            client_id, file_name, file_data = message.split(":")[1:4]
+            client_id, request_id, file_name, file_data = message.split(":")[1:5]
             response = self.append_to_file(client_id, file_name, file_data)
-            self.sock.sendto(response.encode(), client_address)
-
-        elif message == "identify_leader":
-            response = "I am the leader" if self.role == 'leader' else f"Redirect to leader at {self.leader_address}"
-            self.sock.sendto(response.encode(), client_address)
-        
+        elif message.startswith("identify_leader"):
+            if self.role == 'leader':
+                response = "I am the leader"
+            else:
+                if self.leader_address:
+                    response = f"Redirect to leader:{self.leader_address[0]}:{self.leader_address[1]}"
+                else:
+                    response = "Leader unknown"
         elif message == "ping":
             response = "pong"
-            self.sock.sendto(response.encode(), client_address)
+        else:
+            response = "Unknown command"
 
+        print(f"[DEBUG] Sending response: {response} to {client_address}")
+        self.sock.sendto(response.encode(), client_address)
+    
     def heartbeat_check(self):
         while True:
             if self.role == 'follower' and (time.time() - self.last_heartbeat) > self.election_timeout:
@@ -246,14 +257,13 @@ class LockManagerServer:
             time.sleep(0.1)
     
     def start_election(self):
-        # Only start an election if this server isn't already the leader
         if self.role == 'leader':
-            return
+            return  # Do nothing if already a leader
 
-        # Assume this server will be the leader unless a lower-ID server is found to be active
+        # Initialize the flag
         lowest_active_peer_found = False
 
-        # Check each lower-ID server to see if it's alive
+        # Check each lower-ID server to see if it’s alive
         for peer_id, peer_address in sorted([(i+1, p) for i, p in enumerate(self.peers)]):
             if peer_id < self.server_id:
                 # Ping each lower-ID peer to check if they are still alive
@@ -293,14 +303,11 @@ class LockManagerServer:
         return False
 
 
-    def request_vote(self, peer, term, candidate_id):
-        message = f"request_vote:{term}:{candidate_id}"
-        self.sock.sendto(message.encode(), peer)
-
     def send_heartbeats(self):
         while self.role == 'leader':
-            message = f"heartbeat:{self.term}:{self.server_id}"
+            message = f"heartbeat:{self.server_id}"
             for peer in self.peers:
+                print(f"[DEBUG] Sending heartbeat to {peer}")
                 self.sock.sendto(message.encode(), peer)
             time.sleep(1)
 

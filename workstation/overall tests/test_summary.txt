@@ -1,7 +1,0 @@
-Test Summary
-====================
-single_server_failure_lock_held:
-  Total Runs: 10
-  Successes: 10
-  Failures: 0
-
