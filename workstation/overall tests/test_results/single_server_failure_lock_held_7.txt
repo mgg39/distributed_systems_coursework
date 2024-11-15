@@ -1,9 +1,7 @@
 Test ID: single_server_failure_lock_held_7
 Test: single_server_failure_lock_held
 Iteration: 7
-Start Time: 2024-11-14 10:13:08.866822
-single_server_failure_lock_held_7 - Client 1 appended 'A' to file_1 with result: append success
-single_server_failure_lock_held_7 - Client 2 appended 'B' to file_1 with result: append success
-single_server_failure_lock_held_7 - Test result: PASS
-Result: PASS
-End Time: 2024-11-14 10:13:10.896162
+Start Time: 2024-11-15 14:35:23.582417
+single_server_failure_lock_held_7 - Exception: DistributedClient.__init__() got an unexpected keyword argument 'servers'
+Result: FAIL
+End Time: 2024-11-15 14:35:23.582437

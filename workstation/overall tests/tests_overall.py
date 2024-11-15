@@ -39,8 +39,8 @@ def log_result(test_name, success, test_id):
 
 def network_failure_packet_delay(test_id, f):
     try:
-        client1 = DistributedClient(client_id="client_1", replicas=[("localhost", 8080)])
-        client2 = DistributedClient(client_id="client_2", replicas=[("localhost", 8080)])
+        client1 = DistributedClient(client_id="client_1", servers=[("localhost", 8080)])
+        client2 = DistributedClient(client_id="client_2", servers=[("localhost", 8080)])
         
         log_to_file_and_console(f"{test_id} - Client 1 attempting to acquire lock", f)
         lock_acquired = client1.acquire_lock()
@@ -92,8 +92,8 @@ def network_failure_packet_delay(test_id, f):
 
 def network_failure_packet_drop_server_loss(test_id, f):
     try:
-        client1 = DistributedClient(client_id="client_1", replicas=[("localhost", 8080)])
-        client2 = DistributedClient(client_id="client_2", replicas=[("localhost", 8080)])
+        client1 = DistributedClient(client_id="client_1", servers=[("localhost", 8080)])
+        client2 = DistributedClient(client_id="client_2", servers=[("localhost", 8080)])
         
         log_to_file_and_console(f"{test_id} - Simulating server packet loss for client 1 lock acquisition", f)
         
@@ -127,8 +127,8 @@ def network_failure_packet_drop_server_loss(test_id, f):
 
 def network_failure_packet_drop_client_loss(test_id, f):
     try:
-        client1 = DistributedClient(client_id="client_1", replicas=[("localhost", 8080)])
-        client2 = DistributedClient(client_id="client_2", replicas=[("localhost", 8080)])
+        client1 = DistributedClient(client_id="client_1", servers=[("localhost", 8080)])
+        client2 = DistributedClient(client_id="client_2", servers=[("localhost", 8080)])
         
         log_to_file_and_console(f"{test_id} - Simulating client 1 packet loss", f)
         lock_acquired_client2 = client2.acquire_lock()
@@ -149,8 +149,8 @@ def network_failure_packet_drop_client_loss(test_id, f):
 
 def network_failure_duplicated_packets(test_id, f):
     try:
-        client1 = DistributedClient(client_id="client_1", replicas=[("localhost", 8080)])
-        client2 = DistributedClient(client_id="client_2", replicas=[("localhost", 8080)])
+        client1 = DistributedClient(client_id="client_1", servers=[("localhost", 8080)])
+        client2 = DistributedClient(client_id="client_2", servers=[("localhost", 8080)])
         
         log_to_file_and_console(f"{test_id} - Client 1 acquiring lock and appending", f)
         client1.acquire_lock()
@@ -174,8 +174,8 @@ def network_failure_duplicated_packets(test_id, f):
 
 def network_failure_combined_failures(test_id, f):
     try:
-        client1 = DistributedClient(client_id="client_1", replicas=[("localhost", 8080)])
-        client2 = DistributedClient(client_id="client_2", replicas=[("localhost", 8080)])
+        client1 = DistributedClient(client_id="client_1", servers=[("localhost", 8080)])
+        client2 = DistributedClient(client_id="client_2", servers=[("localhost", 8080)])
         
         log_to_file_and_console(f"{test_id} - Client 1 acquiring lock and appending", f)
         client1.acquire_lock()
@@ -198,8 +198,8 @@ def network_failure_combined_failures(test_id, f):
 
 def client_failure_stall_before_edit(test_id, f):
     try:
-        client1 = DistributedClient(client_id="client_1", replicas=[("localhost", 8080)])
-        client2 = DistributedClient(client_id="client_2", replicas=[("localhost", 8080)])
+        client1 = DistributedClient(client_id="client_1", servers=[("localhost", 8080)])
+        client2 = DistributedClient(client_id="client_2", servers=[("localhost", 8080)])
         
         # Client 1 acquires lock, waits to simulate stall, then releases
         client1.acquire_lock()
@@ -229,8 +229,8 @@ def client_failure_stall_before_edit(test_id, f):
 
 def client_failure_stall_after_edit(test_id, f):
     try:
-        client1 = DistributedClient(client_id="client_1", replicas=[("localhost", 8080)])
-        client2 = DistributedClient(client_id="client_2", replicas=[("localhost", 8080)])
+        client1 = DistributedClient(client_id="client_1", servers=[("localhost", 8080)])
+        client2 = DistributedClient(client_id="client_2", servers=[("localhost", 8080)])
         
         client1.acquire_lock()
         client1.append_file("file_1", "A")  # Client 1 writes "A" into file_1
@@ -252,7 +252,7 @@ def client_failure_stall_after_edit(test_id, f):
 
 def single_server_failure_lock_free(test_id, f):
     try:
-        client1 = DistributedClient(client_id="client_1", replicas=[("localhost", 8080)])
+        client1 = DistributedClient(client_id="client_1", servers=[("localhost", 8080)])
         
         client1.acquire_lock()
         client1.append_file("file_1", "A")  # Client 1 writes "A" into file_1
@@ -274,8 +274,8 @@ def single_server_failure_lock_free(test_id, f):
 
 def single_server_failure_lock_held(test_id, f):
     try:
-        client1 = DistributedClient(client_id="client_1", replicas=[("localhost", 8080)])
-        client2 = DistributedClient(client_id="client_2", replicas=[("localhost", 8080)])
+        client1 = DistributedClient(client_id="client_1", servers=[("localhost", 8080)])
+        client2 = DistributedClient(client_id="client_2", servers=[("localhost", 8080)])
         
         # Client 1 acquires lock and writes "A" to file_1
         client1.acquire_lock()

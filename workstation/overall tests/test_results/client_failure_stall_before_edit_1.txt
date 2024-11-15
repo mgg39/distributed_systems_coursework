@@ -1,0 +1,7 @@
+Test ID: client_failure_stall_before_edit_1
+Test: client_failure_stall_before_edit
+Iteration: 1
+Start Time: 2024-11-15 14:35:23.579676
+client_failure_stall_before_edit_1 - Exception: DistributedClient.__init__() got an unexpected keyword argument 'servers'
+Result: FAIL
+End Time: 2024-11-15 14:35:23.579698

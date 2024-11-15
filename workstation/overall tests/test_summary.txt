@@ -1,7 +1,98 @@
 Test Summary
 ====================
+network_failure_packet_delay:
+  Total Runs: 10
+  Successes: 0
+  Failures: 10
+  Failed Test IDs:
+    - network_failure_packet_delay_1
+    - network_failure_packet_delay_2
+    - network_failure_packet_delay_3
+    - network_failure_packet_delay_4
+    - network_failure_packet_delay_5
+    - network_failure_packet_delay_6
+    - network_failure_packet_delay_7
+    - network_failure_packet_delay_8
+    - network_failure_packet_delay_9
+    - network_failure_packet_delay_10
+
+network_failure_packet_drop_server_loss:
+  Total Runs: 10
+  Successes: 0
+  Failures: 10
+  Failed Test IDs:
+    - network_failure_packet_drop_1
+    - network_failure_packet_drop_2
+    - network_failure_packet_drop_3
+    - network_failure_packet_drop_4
+    - network_failure_packet_drop_5
+    - network_failure_packet_drop_6
+    - network_failure_packet_drop_7
+    - network_failure_packet_drop_8
+    - network_failure_packet_drop_9
+    - network_failure_packet_drop_10
+
+client_failure_stall_before_edit:
+  Total Runs: 10
+  Successes: 0
+  Failures: 10
+  Failed Test IDs:
+    - client_failure_stall_before_edit_1
+    - client_failure_stall_before_edit_2
+    - client_failure_stall_before_edit_3
+    - client_failure_stall_before_edit_4
+    - client_failure_stall_before_edit_5
+    - client_failure_stall_before_edit_6
+    - client_failure_stall_before_edit_7
+    - client_failure_stall_before_edit_8
+    - client_failure_stall_before_edit_9
+    - client_failure_stall_before_edit_10
+
+client_failure_stall_after_edit:
+  Total Runs: 10
+  Successes: 0
+  Failures: 10
+  Failed Test IDs:
+    - client_failure_stall_after_edit_1
+    - client_failure_stall_after_edit_2
+    - client_failure_stall_after_edit_3
+    - client_failure_stall_after_edit_4
+    - client_failure_stall_after_edit_5
+    - client_failure_stall_after_edit_6
+    - client_failure_stall_after_edit_7
+    - client_failure_stall_after_edit_8
+    - client_failure_stall_after_edit_9
+    - client_failure_stall_after_edit_10
+
+single_server_failure_lock_free:
+  Total Runs: 10
+  Successes: 0
+  Failures: 10
+  Failed Test IDs:
+    - single_server_failure_lock_free_1
+    - single_server_failure_lock_free_2
+    - single_server_failure_lock_free_3
+    - single_server_failure_lock_free_4
+    - single_server_failure_lock_free_5
+    - single_server_failure_lock_free_6
+    - single_server_failure_lock_free_7
+    - single_server_failure_lock_free_8
+    - single_server_failure_lock_free_9
+    - single_server_failure_lock_free_10
+
 single_server_failure_lock_held:
   Total Runs: 10
-  Successes: 10
-  Failures: 0
+  Successes: 0
+  Failures: 10
+  Failed Test IDs:
+    - single_server_failure_lock_held_1
+    - single_server_failure_lock_held_2
+    - single_server_failure_lock_held_3
+    - single_server_failure_lock_held_4
+    - single_server_failure_lock_held_5
+    - single_server_failure_lock_held_6
+    - single_server_failure_lock_held_7
+    - single_server_failure_lock_held_8
+    - single_server_failure_lock_held_9
+    - single_server_failure_lock_held_10
 
