@@ -56,23 +56,51 @@ class DistributedClient:
         print(f"{self.client_id} - Failed to find leader after {retries} attempts")
         return False
 
-    def acquire_lock(self, max_retries=5, base_interval=0.5):
-        retry_interval = base_interval
-        for attempt in range(max_retries):
+    def check_queue_status(self):
+        response = self.send_message("get_queue_status")
+        if response.startswith("queued"):
+            position = int(response.split(":")[1].replace("position_", ""))
+            print(f"{self.client_id}: Currently in queue at position {position}.")
+            return position
+        elif response == "You hold the lock":
+            print(f"{self.client_id}: Lock already held by this client.")
+            self.lock_acquired = True
+            return -1  # Lock is already held
+        else:
+            print(f"{self.client_id}: Unexpected queue status response: {response}")
+            return None  # Unexpected response
+
+    def acquire_lock(self, max_wait_time=60, check_interval=5):
+        start_time = time.time()
+        while time.time() - start_time < max_wait_time:
             response = self.send_message("acquire_lock")
             if response.startswith("grant lock"):
+                # Lock granted
                 self.lock_acquired = True
                 _, lease_duration_str = response.split(":")
                 self.lease_duration = int(lease_duration_str)
                 threading.Thread(target=self.start_lease_timer, daemon=True).start()
                 print(f"{self.client_id}: Lock acquired with lease duration of {self.lease_duration} seconds.")
                 return True
-            elif response == "Lock is currently held":
-                print(f"{self.client_id}: Lock is held, retrying...")
+            elif response.startswith("queued"):
+                # Added to queue, extract position
+                position = int(response.split(":")[1].replace("position_", ""))
+                print(f"{self.client_id}: Added to queue at position {position}. Retrying later...")
+                time.sleep(check_interval)  # Wait before checking again
+            elif response.startswith("Redirect to leader"):
+                # Redirect to new leader
+                self.find_leader()
+                continue
             else:
-                print(f"{self.client_id}: Failed to acquire lock - {response}")
-            time.sleep(retry_interval)
-            retry_interval *= 2
+                # Unexpected response
+                print(f"{self.client_id}: Unexpected response - {response}")
+
+            # Check timeout
+            if time.time() - start_time >= max_wait_time:
+                print(f"{self.client_id}: Waited too long in queue. Giving up.")
+                return False
+
+        print(f"{self.client_id}: Exceeded maximum wait time of {max_wait_time} seconds.")
         return False
 
     def start_lease_timer(self):
@@ -85,12 +113,16 @@ class DistributedClient:
 
     def release_lock(self):
         if self.lock_acquired:
-            response = self.send_message("release_lock")
-            if response == "unlock success":
-                self.lock_acquired = False
-                print(f"{self.client_id}: Lock released successfully.")
-            else:
-                print(f"{self.client_id}: Failed to release lock - {response}")
+            for attempt in range(3):  # Retry release lock up to 3 times
+                response = self.send_message("release_lock")
+                if response == "unlock success":
+                    self.lock_acquired = False
+                    print(f"{self.client_id}: Lock released successfully.")
+                    return
+                else:
+                    print(f"{self.client_id}: Failed to release lock, retrying... (Attempt {attempt + 1}/3)")
+                    time.sleep(1)  # Short delay before retry
+            print(f"{self.client_id}: Failed to release lock after retries.")
         else:
             print(f"{self.client_id}: Cannot release lock - lock not held by this client.")
 
@@ -146,35 +178,50 @@ class DistributedClient:
         print(f"{self.client_id}: Connection closed.")
 
 if __name__ == "__main__":
-    print("Hello")
     # List of known server addresses
     servers = [('localhost', 8080), ('localhost', 8082), ('localhost', 8084)]
-    client = DistributedClient("client_1", servers)
-    
-    try:
-        print("Attempting to acquire lock...")
-        
-        # Try to acquire lock with retries
-        if client.acquire_lock():
-            print("Lock acquired. Attempting to append data to file.")
-            
-            # Append data to file if lock acquired
-            append_result = client.append_file("file_1", "This is a test log entry.")
-            
-            if append_result == "append success":
-                print("Data appended successfully.")
-            elif append_result == "replication failed":
-                print("Data appended locally but replication to replicas failed.")
+
+    # Create two clients
+    client1 = DistributedClient("client_1", servers)
+    client2 = DistributedClient("client_2", servers)
+
+    def client_task(client, file_name, data):
+        try:
+            print(f"{client.client_id}: Attempting to acquire lock...")
+
+            # Try to acquire lock with a maximum wait time of 60 seconds
+            if client.acquire_lock(max_wait_time=60):
+                print(f"{client.client_id}: Lock acquired. Attempting to append data to file.")
+
+                # Append data to the file if the lock is acquired
+                append_result = client.append_file(file_name, data)
+
+                if append_result == "append success":
+                    print(f"{client.client_id}: Data appended successfully.")
+                elif append_result == "replication failed":
+                    print(f"{client.client_id}: Data appended locally but replication to replicas failed.")
+                else:
+                    print(f"{client.client_id}: Append failed with response: {append_result}")
             else:
-                print(f"Append failed with response: {append_result}")
-        else:
-            print("Failed to acquire lock after retries.")
-    finally:
-        print("Releasing lock if held and closing connection.")
-        
-        # Ensure lock is released after operations are complete
-        client.release_lock()
-        
-        # Close the connection
-        client.close()
+                print(f"{client.client_id}: Failed to acquire lock after waiting.")
+        finally:
+            print(f"{client.client_id}: Releasing lock if held and closing connection.")
+            # Ensure lock is released after operations are complete
+            client.release_lock()
+            # Close the connection
+            client.close()
+
+    # Create threads for each client to simulate simultaneous operations
+    thread1 = threading.Thread(target=client_task, args=(client1, "file_1", "A"))
+    thread2 = threading.Thread(target=client_task, args=(client2, "file_1", "B"))
+
+    # Start the threads
+    thread1.start()
+    thread2.start()
+
+    # Wait for both threads to finish
+    thread1.join()
+    thread2.join()
+
+    print("Both clients have completed their operations.")
 

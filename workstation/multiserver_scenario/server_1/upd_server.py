@@ -42,6 +42,8 @@ class LockManagerServer:
         self.lock_expiration_time = None
         self.request_history = defaultdict(dict)
 
+        self.queue_clients = []
+
         # Load state for fault tolerance
         self.load_state()
         if not os.path.exists(STATE_FILE):
@@ -129,30 +131,71 @@ class LockManagerServer:
         return True
     #----------Replica logic---------------
 
+    def queue(self, client_id):
+        if client_id not in self.queue_clients:
+            self.queue_clients.append(client_id)
+        self.process_queue()
+
+    def process_queue(self):
+        with self.lock:
+            if not self.current_lock_holder and self.queue_clients:
+                next_client = self.queue_clients.pop(0)  # Get the next client in line
+                self.current_lock_holder = next_client
+                self.lock_expiration_time = time.time() + LOCK_LEASE_DURATION
+                self.notify_followers_lock_state()
+                self.save_state()
+                print(f"[DEBUG] Lock granted to {next_client}.")
+
     def acquire_lock(self, client_id):
         if self.role == 'leader':
             with self.lock:
                 current_time = time.time()
+
+                # Check if the lock can be granted
                 if not self.current_lock_holder or (self.lock_expiration_time and current_time > self.lock_expiration_time):
+                    # Grant the lock to the requesting client
                     self.current_lock_holder = client_id
                     self.lock_expiration_time = current_time + LOCK_LEASE_DURATION
                     self.notify_followers_lock_state()
                     self.save_state()
                     return f"grant lock:{LOCK_LEASE_DURATION}"
                 else:
-                    return "Lock is currently held"
+                    # Add client to queue
+                    if client_id not in self.queue_clients:
+                        self.queue_clients.append(client_id)
+                    position = self.queue_clients.index(client_id) + 1
+                    return f"queued:position_{position}"
         else:
             return f"Redirect to leader at {self.leader_address}"
 
-    def release_lock(self, client_id):
+    def release_lock(self):
+        if self.lock_acquired:
+            for attempt in range(3):  # Retry release lock up to 3 times
+                response = self.send_message("release_lock")
+                if response == "unlock success":
+                    self.lock_acquired = False
+                    print(f"{self.client_id}: Lock released successfully.")
+                    return
+                elif response == "You do not hold the lock":
+                    print(f"{self.client_id}: Lock release failed - client does not hold the lock.")
+                    return
+                else:
+                    print(f"{self.client_id}: Failed to release lock, retrying... (Attempt {attempt + 1}/3)")
+                    time.sleep(1)  # Short delay before retry
+            print(f"{self.client_id}: Failed to release lock after retries.")
+        else:
+            print(f"{self.client_id}: Cannot release lock - lock not held by this client.")
+
+    
+    def get_queue_status(self, client_id):
         with self.lock:
             if self.current_lock_holder == client_id:
-                self.current_lock_holder = None
-                self.lock_expiration_time = None
-                self.save_state()
-                return "unlock success"
+                return "You hold the lock"
+            elif client_id in self.queue_clients:
+                position = self.queue_clients.index(client_id) + 1
+                return f"queued:position_{position}"
             else:
-                return "You do not hold the lock"
+                return "You are not in the queue"
 
     def renew_lease(self, client_id):
         with self.lock:
@@ -196,15 +239,17 @@ class LockManagerServer:
 
     #----------Replica logic---------------
 
-
     def monitor_lock_expiration(self):
         while True:
             with self.lock:
                 if self.current_lock_holder and self.lock_expiration_time and time.time() > self.lock_expiration_time:
+                    print(f"[DEBUG] Lock expired for client {self.current_lock_holder}. Releasing lock.")
                     self.current_lock_holder = None
                     self.lock_expiration_time = None
                     self.save_state()
+                    self.process_queue()  # Process the next client in the queue
             time.sleep(1)
+
     
     def handle_request(self, data, client_address):
         message = data.decode()
