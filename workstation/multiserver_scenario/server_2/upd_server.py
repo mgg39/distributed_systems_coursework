@@ -92,10 +92,7 @@ class LockManagerServer:
                     if self.sync_file(lock_data) == True:
                         self.sock.sendto(message.encode(), self.leader_address)
                 
-                #Distributed client
-                elif parts[0] == "identify_leader":
-                    # Respond to leader identification requests
-                    print(f'[DEBUG] I am receiving leader question')
+                elif message == "identify_leader":
                     if self.role == 'leader':
                         response = "I am the leader"
                     else:
@@ -103,9 +100,8 @@ class LockManagerServer:
                             response = f"Redirect to leader:{self.leader_address[0]}:{self.leader_address[1]}"
                         else:
                             response = "Leader unknown"
-                    self.sock.sendto(response.encode(), client_address)                
-             
-
+                    self.sock.sendto(response.encode(), client_address)
+                    
             except socket.timeout:
                 continue
             except Exception as e:
@@ -229,28 +225,32 @@ class LockManagerServer:
     
     def handle_request(self, data, client_address):
         message = data.decode()
+        print(f"[DEBUG] Received request: {message} from {client_address}")
+
         if message.startswith("acquire_lock"):
             client_id = message.split(":")[1]
             response = self.acquire_lock(client_id)
-            self.sock.sendto(response.encode(), client_address)
-        
         elif message.startswith("release_lock"):
             client_id = message.split(":")[1]
             response = self.release_lock(client_id)
-            self.sock.sendto(response.encode(), client_address)
-
         elif message.startswith("append_file"):
             client_id, file_name, file_data = message.split(":")[1:4]
             response = self.append_to_file(client_id, file_name, file_data)
-            self.sock.sendto(response.encode(), client_address)
-
-        elif message == "identify_leader":
-            response = "I am the leader" if self.role == 'leader' else f"Redirect to leader at {self.leader_address}"
-            self.sock.sendto(response.encode(), client_address)
-        
+        elif message.startswith("identify_leader"):
+            if self.role == 'leader':
+                response = "I am the leader"
+            else:
+                if self.leader_address:
+                    response = f"Redirect to leader:{self.leader_address[0]}:{self.leader_address[1]}"
+                else:
+                    response = "Leader unknown"
         elif message == "ping":
             response = "pong"
-            self.sock.sendto(response.encode(), client_address)
+        else:
+            response = "Unknown command"
+
+        print(f"[DEBUG] Sending response: {response} to {client_address}")
+        self.sock.sendto(response.encode(), client_address)
 
     def heartbeat_check(self):
         while True:
@@ -258,7 +258,7 @@ class LockManagerServer:
                 print(f"[DEBUG] Server {self.server_id} detected leader failure, starting election")
                 self.start_election()
             time.sleep(0.1)
-    
+
     def start_election(self):
         # Only start an election if this server isn't already the leader
         if self.role == 'leader':

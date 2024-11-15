@@ -7,7 +7,7 @@ import urllib.parse
 class DistributedClient:
     def __init__(self, client_id, replicas):
         self.client_id = client_id
-        self.replicas = replicas  # List of known server addresses (host, port)
+        self.servers = servers  # List of known server addresses (host, port)
         self.current_leader = None
         self.connection = None  # Will be set when we find the leader
         self.lock_acquired = False
@@ -24,7 +24,7 @@ class DistributedClient:
             print(f"{self.client_id} - Attempting to find leader, attempt {attempt + 1}/{retries}")
             unreachable_servers = set()
             
-            for address in self.replicas:
+            for address in self.servers:
                 if address in unreachable_servers:
                     continue
                 self.connection = RPCConnection(*address)
@@ -54,17 +54,6 @@ class DistributedClient:
         self.current_leader = None
         print(f"{self.client_id} - Failed to find leader after {retries} attempts")
         return False
-
-    def send_message(self, message_type, additional_info=""):
-        if not self.current_leader and not self.find_leader():
-            return "Leader not found"
-        
-        response = self.connection.rpc_send(f"{message_type}:{self.client_id}:{self.next_request_id()}:{urllib.parse.quote(additional_info)}")
-        if response.startswith("Redirect to leader"):
-            if not self.find_leader():
-                return "Leader redirect failed"
-            return self.send_message(message_type, additional_info)
-        return response
 
     def acquire_lock(self, max_retries=5, base_interval=0.5):
         retry_interval = base_interval
@@ -112,6 +101,17 @@ class DistributedClient:
                 self.lock_acquired = False
                 break
             time.sleep(self.lease_duration / 3)
+    
+    def send_message(self, message_type, additional_info=""):
+        if not self.current_leader and not self.find_leader():
+            return "Leader not found"
+        
+        response = self.connection.rpc_send(f"{message_type}:{self.client_id}:{self.next_request_id()}:{urllib.parse.quote(additional_info)}")
+        if response.startswith("Redirect to leader"):
+            if not self.find_leader():
+                return "Leader redirect failed"
+            return self.send_message(message_type, additional_info)
+        return response
 
     def append_file(self, file_name, data):
         if self.lock_acquired:
@@ -138,8 +138,8 @@ class DistributedClient:
 if __name__ == "__main__":
     print("Hello")
     # List of known server addresses
-    replicas = [('localhost', 8080), ('localhost', 8082), ('localhost', 8084)]
-    client = DistributedClient("client_1", replicas)
+    servers = [('localhost', 8080), ('localhost', 8082), ('localhost', 8084)]
+    client = DistributedClient("client_1", servers)
     
     try:
         print("Attempting to acquire lock...")
@@ -167,3 +167,4 @@ if __name__ == "__main__":
         
         # Close the connection
         client.close()
+

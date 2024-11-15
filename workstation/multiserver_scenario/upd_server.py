@@ -9,7 +9,7 @@ from collections import defaultdict
 FILES_DIR = "server_files"
 NUM_FILES = 100
 LOCK_LEASE_DURATION = 20  # Lease duration in seconds
-STATE_FILE = os.path.join(os.path.dirname(__file__), "server_state_1.json")
+STATE_FILE = os.path.join(os.path.dirname(__file__), "server_state_2.json")
 
 # Ensure the files directory exists and create 100 files
 if not os.path.exists(FILES_DIR):
@@ -18,7 +18,7 @@ for i in range(NUM_FILES):
     open(os.path.join(FILES_DIR, f"file_{i}"), 'a').close()
 
 class LockManagerServer:
-    def __init__(self, host='localhost', port=8080, server_id=1, peers=[("localhost", 8083), ("localhost", 8085)]):
+    def __init__(self, host='localhost', port=8082, server_id=2, peers=[("localhost", 8081), ("localhost", 8085)]):
         self.server_address = (host, port)
         self.server_id = server_id
         self.peers = peers
@@ -225,33 +225,29 @@ class LockManagerServer:
     
     def handle_request(self, data, client_address):
         message = data.decode()
-        print(f"[DEBUG] Received request: {message} from {client_address}")
-
         if message.startswith("acquire_lock"):
             client_id = message.split(":")[1]
             response = self.acquire_lock(client_id)
+            self.sock.sendto(response.encode(), client_address)
+        
         elif message.startswith("release_lock"):
             client_id = message.split(":")[1]
             response = self.release_lock(client_id)
+            self.sock.sendto(response.encode(), client_address)
+
         elif message.startswith("append_file"):
             client_id, file_name, file_data = message.split(":")[1:4]
             response = self.append_to_file(client_id, file_name, file_data)
-        elif message.startswith("identify_leader"):
-            if self.role == 'leader':
-                response = "I am the leader"
-            else:
-                if self.leader_address:
-                    response = f"Redirect to leader:{self.leader_address[0]}:{self.leader_address[1]}"
-                else:
-                    response = "Leader unknown"
+            self.sock.sendto(response.encode(), client_address)
+
+        elif message == "identify_leader":
+            response = "I am the leader" if self.role == 'leader' else f"Redirect to leader at {self.leader_address}"
+            self.sock.sendto(response.encode(), client_address)
+        
         elif message == "ping":
             response = "pong"
-        else:
-            response = "Unknown command"
+            self.sock.sendto(response.encode(), client_address)
 
-        print(f"[DEBUG] Sending response: {response} to {client_address}")
-        self.sock.sendto(response.encode(), client_address)
-    
     def heartbeat_check(self):
         while True:
             if self.role == 'follower' and (time.time() - self.last_heartbeat) > self.election_timeout:
