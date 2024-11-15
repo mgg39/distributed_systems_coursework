@@ -2,7 +2,7 @@ import socket
 import time
 
 class RPCConnection:
-    def __init__(self, server_address, server_port, timeout=2, retries=2, backoff=1):
+    def __init__(self, server_address, server_port, timeout=2, retries=2, backoff=2):
         # Set reduced timeout and retries for quick feedback during testing
         self.server_address = (server_address, server_port)
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -28,6 +28,7 @@ class RPCConnection:
                 backoff_time *= 2
             except Exception as e:
                 print(f"Attempt {attempt+1}: Error - {e}")
+                print(f"Message error: {message}")
                 attempt += 1
                 if attempt > self.retries:
                     return f"Error after retries: {e}"
