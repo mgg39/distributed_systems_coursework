@@ -123,7 +123,7 @@ class LockManagerServer:
             print(f"[DEBUG] Synchronized lock state from leader")
             return True
 
-    def sync_file(self, file_name, file_data): #Not working as expected
+    def sync_file(self, file_name, file_data): 
         # Synchronize file append from leader
         try:
             print(f"[DEBUG] Follower syncing file {file_name} with data: {file_data}")
@@ -136,7 +136,7 @@ class LockManagerServer:
             return True
         except Exception as e:
             print(f"[ERROR] Failed to sync file {file_name}: {str(e)}")
-            return False
+            return False #Not working as expected
     #----------Replica logic---------------
 
     def queue(self, client_id):
