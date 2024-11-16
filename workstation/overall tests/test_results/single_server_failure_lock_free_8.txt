@@ -1,7 +1,0 @@
-Test ID: single_server_failure_lock_free_8
-Test: single_server_failure_lock_free
-Iteration: 8
-Start Time: 2024-11-15 14:35:23.581740
-single_server_failure_lock_free_8 - Exception: DistributedClient.__init__() got an unexpected keyword argument 'servers'
-Result: FAIL
-End Time: 2024-11-15 14:35:23.581760

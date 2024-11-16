@@ -1,7 +1,0 @@
-Test ID: network_failure_packet_drop_4
-Test: network_failure_packet_drop
-Iteration: 4
-Start Time: 2024-11-15 14:35:23.579173
-network_failure_packet_drop_4 - Exception: DistributedClient.__init__() got an unexpected keyword argument 'servers'
-Result: FAIL
-End Time: 2024-11-15 14:35:23.579194
