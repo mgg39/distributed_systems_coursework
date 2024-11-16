@@ -1,97 +1,90 @@
-# Distributed Lock Server
+### Design Document for Distributed Lock Manager
 
-This coursework implements a UDP-based (User Datagram Protocol) lock server for a distributed system as part of the Distributed Systems course at the University of Edinburgh. The server allows multiple clients to safely acquire and release locks on shared resources, demonstrating key concepts of concurrency and fault tolerance.
+1. Overview
+-----------
+The Distributed Lock Manager ensures synchronization across multiple servers in a distributed system.
+- Objective: Enable synchronized file operations with fault-tolerant leader election and lock state replication.
+- Key Features:
+  - Leader election using server IDs (lowest ID becomes leader).
+  - Lock queueing for fair acquisition.
+  - State replication to followers.
+  - Lease-based locks with expiration handling.
 
-## Table of Contents
+2. System Architecture
+-----------------------
+- Leader Server: Manages locks, processes client requests, and propagates updates to followers.
+- Follower Servers: Synchronize state with the leader and participate in leader election.
+- Clients: Send requests to acquire/release locks and perform file operations.
 
-- [Overview](#overview)
-- [File Structure](#file-structure)
-  - [Main](#main)
-  - [Test crashes](#test-crashes)
-- [Implementation Details](#implementation-details)
-  - [RPC Initialization and Lock Management](#rpc-initialization-and-lock-management)
-  - [Socket Programming and Multithreading](#socket-programming-and-multithreading)
-  - [Crash Handling](#crash-handling)
-- [Usage](#usage)
-- [Dependencies](#dependencies)
-- [Environment](#environment)
-- [Authors](#authors)
+System Diagram:
+  Client 1   Client 2   Client N
+     |          |           |
+     +----------+-----------+
+                |
+         Leader Server (Server 1)
+                |
+     ---------------------------
+     |                         |
+Follower Server 2       Follower Server 3
 
-## Overview
+3. Workflow
+-----------
+Lock Acquisition:
+- Client sends `acquire_lock` to leader.
+- Leader grants lock or queues the request.
+- Leader propagates lock state to followers.
 
-The system consists of a lock manager server and multiple distributed clients that communicate with the server to manage access to shared files. Clients must acquire a lock before they can append data to a file, ensuring that only one client can modify a file at a time.
+File Operation:
+- Client with lock sends `append_file` to leader.
+- Leader updates the file and propagates changes to followers.
 
-## File Structure
+Lock Release:
+- Client sends `release_lock`.
+- Leader releases lock and grants it to the next client in the queue.
 
-The project contains the following folders:
+Leader Failure:
+- Followers detect failure via heartbeat timeout.
+- A new leader is elected (lowest ID active server).
 
-1. **`Main`**:
-This folders contains the main versions of the code used to build this task:
-    1.1. **`upd_server.py`**: Implements the UDP lock server.
-    1.2. **`rpc_connection.py`**: Handles RPC connections between clients and the server.
-    1.3. **`distributed_client.py`**: Represents the client that interacts with the server to manage locks and append data to files.
-    1.4. **`test_client.py`**: Contains a testing framework to simulate multiple clients attempting to acquire locks and write to files.
+Workflow Sequence:
+  Client --> Leader --> Followers --> Client
 
-2. **`Test crashes`**: 
-This folders contains the test performed on the network to ensure fault tolerance:
-    2.1 **`dc_simulated_crashes.py`**: implementation of `distributed_client.py` which includes client timeout and delayed message crash scenarios.
-    2.2 **`rpc_connection_copy.py`**: copy of `rpc_connection.py`.
-    2.3 **`test_client_reconnect_after_server_restart.py`**: test server can restore its state after a restart and client can reconnect and renew/re-acquire the lock as expected.
-    2.4 **`test_crash_mid_operation.py`**: testing client disconnect mid operation.
-    2.5 **`test_multi_client.py`**: testing multi-client server request of logs to different and overlapping files.
-    2.6 **`upd_server_copy.py`**: copy of `upd_server.py`.
+4. Assumptions
+--------------
+- Leader is always the lowest ID active server.
+- Clients communicate only with the leader.
+- Network latency is consistent and minimal.
+- Locks are leased for a fixed duration (default: 20 seconds).
 
-## Implementation Details
+5. Key Scenarios
+-----------------
+Normal Operation:
+- Clients acquire and release locks successfully.
+- File operations are synchronized.
 
-### RPC Initialization and Lock Management
+Leader Failure:
+- Followers elect a new leader and resume operation.
 
-- **RPC Connection**: The `RPCConnection` class in `rpc_connection.py` manages UDP communication with the server. It implements a timeout mechanism for request handling.
-- **Lock Management**: The server supports three main operations for lock management:
-  - `acquire_lock`: Clients request locks and receive a lease duration if granted.
-  - `release_lock`: Clients release locks they hold.
-  - `append_file`: Clients append data to files only if they hold the lock.
+Lock Expiry:
+- Expired locks are released, and the next client in the queue gets the lock.
 
-### Socket Programming and Multithreading
+6. Limitations
+--------------
+- Assumes clients know server addresses.
+- Limited fault tolerance for simultaneous failures.
+- Network delays may cause temporary inconsistencies.
 
-- The server is implemented using Python’s `socket` library for UDP communication. It listens for client requests in a loop, spawning new threads to handle each request, allowing multiple clients to interact with the server simultaneously.
-- Multithreading is used for both the server and client implementations. The server runs a background thread to monitor lock expiration, while clients run threads to send heartbeat messages without blocking their main operations.
+7. Key Components in Code
+--------------------------
+Server:
+- `acquire_lock`: Handles lock requests and queues clients.
+- `release_lock`: Releases locks and processes the queue.
+- `notify_followers_*`: Updates follower states for lock or file changes.
 
-### Crash Handling
-
-## Network Failure
-- **Lock Expiration**: The server uses a lease mechanism for locks, where a lock is automatically released if not renewed within a specified duration (`LOCK_LEASE_DURATION`). This prevents locks from being held indefinitely due to client crashes.
-
-## Client crash
-- **Heartbeat Mechanism**: Clients send periodic heartbeat messages to renew their locks. If a client fails to send a heartbeat before the lease expires, the server automatically releases the lock.
-
-## Server crash
-- **State Persistence**: The server's state is saved to a JSON file (`server_state.json`) on startup and shutdown, allowing it to recover its state after crashes.
-
-
-## Usage
-
-**`upd_server.py`** effectively demonstrates the core functionalities of the lock server and client interactions. It provides a practical example of how the locking mechanism can be utilized in a distributed environment, showcasing the ability to manage concurrent access to shared resources. 
-
-In this file 5 clients are performing the following steps:
-
-1. *Initialization:* Each client creates an instance of Distributed_Client with a unique client_id (e.g., client_1, client_2, etc.), which helps identify the client in logs and output.
-
-2. *File Mapping:* Each client is mapped to a specific file based on its ID:
-
-    - Clients 1 and 3: Write to file_0
-    - Client 2: Writes to file_2
-    - Clients 4 and 5: Write to file_3
-
-3. *Acquire Lock:* Each client attempts to acquire a lock on its designated file to ensure exclusive access while writing. The lock mechanism prevents multiple clients from writing to the same file simultaneously, avoiding race conditions and potential data corruption.
-
-4. *Write to File:* Once a client successfully acquires the lock:
-
-    It writes a log entry to its designated file. This log entry includes the client_id and specifies which file it’s writing to (e.g., "Log entry from client_1 writing to file_0").
-    This step guarantees that each client writes only once to the designated file, and each log entry includes the client ID and target file for clear traceability.
-
-5. *Release Lock:* After writing, the client releases the lock, allowing other clients to access the file if needed. Releasing the lock is done in a finally block to ensure the lock is always freed, even if an error occurs during writing.
-
-6. *Close Connection:* Each client closes its connection to complete the process.
+Client:
+- `acquire_lock`: Manages retries with exponential backoff.
+- `release_lock`: Ensures locks are released post-operation.
+- `find_leader`: Identifies the current leader server.
 
 ## Dependencies
 This project requires Python 3.12.3. No additional external libraries are necessary, as it relies solely on Python's standard libraries.

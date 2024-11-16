@@ -1,0 +1,1 @@
+    def __init__(self, host='localhost', port=8084, server_id=3, peers=[("localhost", 8081), ("localhost", 8083)]):

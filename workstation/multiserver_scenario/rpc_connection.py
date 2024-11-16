@@ -2,40 +2,47 @@ import socket
 import time
 
 class RPCConnection:
-    def __init__(self, server_address, server_port, timeout=2, retries=2, backoff=2):
-        # Set reduced timeout and retries for quick feedback during testing
-        self.server_address = (server_address, server_port)
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.settimeout(timeout)
-        self.retries = retries
-        self.backoff = backoff
+    def __init__(self, host, port):
+        self.server_address = (host, port) if host and port else None
+        self.sock = None
+        if self.server_address:
+            self.connect()
 
-    def rpc_send(self, message):
-        attempt = 0
-        backoff_time = self.backoff
-        while attempt <= self.retries:
+    def connect(self):
+        try:
+            if self.sock:
+                self.sock.close()
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self.sock.settimeout(2)  # 2 second timeout
+        except Exception as e:
+            print(f"Error creating socket: {e}")
+            raise
+
+    def rpc_send(self, message, max_retries=3):
+        if not self.server_address:
+            return "Error: No server address"
+        
+        for attempt in range(max_retries):
             try:
-                print(f"Attempt {attempt+1}: Sending '{message}' to {self.server_address}")
+                print(f"Attempt {attempt + 1}: Sending '{message}' to {self.server_address}")
+                if not self.sock:
+                    self.connect()
                 self.sock.sendto(message.encode(), self.server_address)
-                data, _ = self.sock.recvfrom(1024)  # Increase recvfrom timeout here if needed
-                return data.decode()
+                response, _ = self.sock.recvfrom(1024)
+                return response.decode()
             except socket.timeout:
-                print(f"Attempt {attempt+1}: Timeout, retrying...")
-                attempt += 1
-                if attempt > self.retries:
-                    return "Timeout: No response after retries"
-                time.sleep(self.backoff)
-                backoff_time *= 2
+                print(f"Attempt {attempt + 1}: Timeout, retrying...")
+                if attempt == max_retries - 1:
+                    return f"Error after retries: No response or invalid socket"
+                time.sleep(0.5)  # Short delay before retry
             except Exception as e:
-                print(f"Attempt {attempt+1}: Error - {e}")
-                print(f"Message error: {message}")
-                attempt += 1
-                if attempt > self.retries:
-                    return f"Error after retries: {e}"
-                time.sleep(self.backoff)
-                backoff_time *= 2
+                print(f"Error during RPC: {e}")
+                return f"Error: {str(e)}"
 
     def close(self):
-        if self.sock:
-            self.sock.close()
-            print("Socket closed")
+        try:
+            if self.sock:
+                self.sock.close()
+                print("Socket closed")
+        except Exception as e:
+            print(f"Error closing socket: {e}")

@@ -37,7 +37,7 @@ class LockManagerServer:
         self.raft_sock.settimeout(1)  # Non-blocking mode with timeout
 
         # Lock management
-        self.lock = threading.Lock()
+        self.lock = threading.Lock() #reentrant locking
         self.current_lock_holder = None
         self.lock_expiration_time = None
         self.request_history = defaultdict(dict)
@@ -82,11 +82,11 @@ class LockManagerServer:
 
                 elif parts[0] == "file_update":
                     file_name, file_data = parts[1], parts[2]
-                    self.sync_file(file_name, file_data)
-                    #TODO: respond - aknowledge updates
-                    if self.sync_file(lock_data) == True:
-                        self.sock.sendto(message.encode(), self.leader_address)
-                
+                    success = self.sync_file(file_name, file_data)
+                    if success:
+                        response = f"file_update_ack:{file_name}"
+                        self.raft_sock.sendto(response.encode(), addr)
+
                 elif message == "identify_leader":
                     if self.role == 'leader':
                         response = "I am the leader"
@@ -118,75 +118,112 @@ class LockManagerServer:
             self.lock_expiration_time = lock_state.get("lock_expiration_time")
             print(f"[DEBUG] Synchronized lock state from leader")
             return True
-
+    
     def sync_file(self, file_name, file_data):
-        # Synchronize file append from leader
         print(f"[DEBUG] Follower syncing file {file_name} with data: {file_data}")
-        file_path = os.path.join(FILES_DIR, file_name)
-        with open(file_path, 'a') as f:
-            f.write(file_data + "\n")
-            f.flush()
-            os.fsync(f.fileno())
-        print(f"[DEBUG] Synchronized file {file_name} with data: {file_data} on follower")
-        return True
+        try:
+            file_path = os.path.join(FILES_DIR, file_name)
+            with open(file_path, 'a') as f:
+                f.write(file_data + "\n")
+                f.flush()
+                os.fsync(f.fileno())
+            print(f"[DEBUG] Successfully synced file {file_name}")
+            return True
+        except Exception as e:
+            print(f"[ERROR] Failed to sync file {file_name}: {e}")
+            return False
+
     #----------Replica logic---------------
 
     def queue(self, client_id):
         if client_id not in self.queue_clients:
             self.queue_clients.append(client_id)
         self.process_queue()
+    
+    def notify_client_lock_granted(self, client_id):
+        client_address = self.get_client_address(client_id)
+        if client_address:
+            message = f"grant lock:{LOCK_LEASE_DURATION}"
+            self.sock.sendto(message.encode(), client_address)
+            print(f"[DEBUG] Notified {client_id} about lock grant.")
 
     def process_queue(self):
         with self.lock:
             if not self.current_lock_holder and self.queue_clients:
-                next_client = self.queue_clients.pop(0)  # Get the next client in line
+                next_client = self.queue_clients.pop(0)
                 self.current_lock_holder = next_client
                 self.lock_expiration_time = time.time() + LOCK_LEASE_DURATION
-                self.notify_followers_lock_state()
+                print(f"[DEBUG] Processed queue, current lock holder: {self.current_lock_holder}")
                 self.save_state()
-                print(f"[DEBUG] Lock granted to {next_client}.")
+                self.notify_followers_lock_state()
+                self.notify_client_lock_granted(next_client)
 
     def acquire_lock(self, client_id):
+        print(f"[DEBUG] Client {client_id} entered acquire lock")
+        
         if self.role == 'leader':
+            print(f"[DEBUG] Client {client_id} entered acquire lock at leader")
+            
             with self.lock:
+                print(f"[DEBUG] Client {client_id} entered acquire lock past self.lock")
                 current_time = time.time()
 
-                # Check if the lock can be granted
+                # Grant the lock if no current holder or lock is expired
                 if not self.current_lock_holder or (self.lock_expiration_time and current_time > self.lock_expiration_time):
-                    # Grant the lock to the requesting client
                     self.current_lock_holder = client_id
                     self.lock_expiration_time = current_time + LOCK_LEASE_DURATION
                     self.notify_followers_lock_state()
                     self.save_state()
+                    print(f"[DEBUG] Lock granted to {client_id}")
                     return f"grant lock:{LOCK_LEASE_DURATION}"
-                else:
-                    # Add client to queue
-                    if client_id not in self.queue_clients:
-                        self.queue_clients.append(client_id)
+
+                # Check if client is already in queue
+                if client_id in self.queue_clients:
                     position = self.queue_clients.index(client_id) + 1
+                    print(f"[DEBUG] Client {client_id} already in queue at position {position}")
                     return f"queued:position_{position}"
-        else:
-            return f"Redirect to leader at {self.leader_address}"
 
-    def release_lock(self):
-        if self.lock_acquired:
-            for attempt in range(3):  # Retry release lock up to 3 times
-                response = self.send_message("release_lock")
-                if response == "unlock success":
-                    self.lock_acquired = False
-                    print(f"{self.client_id}: Lock released successfully.")
-                    return
-                elif response == "You do not hold the lock":
-                    print(f"{self.client_id}: Lock release failed - client does not hold the lock.")
-                    return
+                # Add client to queue
+                self.queue_clients.append(client_id)
+                position = len(self.queue_clients)
+                print(f"[DEBUG] Client {client_id} added to queue at position {position}")
+                return f"queued:position_{position}"
+        else:
+            # If not the leader, redirect client to leader
+            if self.leader_address:
+                return f"Redirect to leader at {self.leader_address}"
+            else:
+                return "Leader unknown"
+                
+    def release_lock(self, client_id):
+        try:
+            print(f"[DEBUG] Release lock called by {client_id}. Current holder: {self.current_lock_holder}")
+            with self.lock:
+                if self.current_lock_holder == client_id:
+                    print(f"[DEBUG] Releasing lock for {client_id}")
+                    self.current_lock_holder = None
+                    self.lock_expiration_time = None
+                    
+                    # Remove client from queue if present
+                    if client_id in self.queue_clients:
+                        self.queue_clients.remove(client_id)
+                    
+                    # Notify followers about lock state change
+                    if self.role == 'leader':
+                        self.notify_followers_lock_state()
+                    
+                    self.save_state()
+                    self.process_queue()  # Process next client in queue
+                    print(f"[DEBUG] Lock successfully released by {client_id}")
+                    return "unlock success"
                 else:
-                    print(f"{self.client_id}: Failed to release lock, retrying... (Attempt {attempt + 1}/3)")
-                    time.sleep(1)  # Short delay before retry
-            print(f"{self.client_id}: Failed to release lock after retries.")
-        else:
-            print(f"{self.client_id}: Cannot release lock - lock not held by this client.")
+                    print(f"[DEBUG] Release failed - {client_id} does not hold the lock. Current holder: {self.current_lock_holder}")
+                    return "You do not hold the lock"
+        except Exception as e:
+            print(f"[ERROR] Exception in release_lock: {e}")
+            return "release failed"
 
-    
+
     def get_queue_status(self, client_id):
         with self.lock:
             if self.current_lock_holder == client_id:
@@ -227,6 +264,7 @@ class LockManagerServer:
         for peer in self.peers:
             message = f"file_update:{file_name}:{file_data}"
             self.sock.sendto(message.encode(), peer)
+        # Optionally wait for acknowledgment here
 
     def notify_followers_lock_state(self):
         lock_data = json.dumps({
@@ -239,21 +277,49 @@ class LockManagerServer:
 
     #----------Replica logic---------------
 
+    def get_client_address(self, client_id):
+        """
+        Retrieve the client address from request history.
+        """
+        return self.request_history.get(client_id, {}).get("address")
+
+
+    def notify_client_lock_expired(self, client_id):
+        client_address = self.get_client_address(client_id)
+        if client_address:
+            self.sock.sendto("lock expired".encode(), client_address)
+            print(f"[DEBUG] Notified {client_id} about lock expiration.")
+
+
     def monitor_lock_expiration(self):
         while True:
             with self.lock:
                 if self.current_lock_holder and self.lock_expiration_time and time.time() > self.lock_expiration_time:
                     print(f"[DEBUG] Lock expired for client {self.current_lock_holder}. Releasing lock.")
+                    expired_client = self.current_lock_holder
                     self.current_lock_holder = None
                     self.lock_expiration_time = None
                     self.save_state()
                     self.process_queue()  # Process the next client in the queue
+                    self.notify_client_lock_expired(expired_client)
             time.sleep(1)
 
-    
+    def notify_client_lock_released(self, client_id):
+        client_address = self.get_client_address(client_id)
+        if client_address:
+            self.sock.sendto("lock expired".encode(), client_address)
+
     def handle_request(self, data, client_address):
         message = data.decode()
         print(f"[DEBUG] Received request: {message} from {client_address}")
+        
+        # Store client address in request history for notifications
+        parts = message.split(":")
+        if len(parts) >= 2:
+            client_id = parts[1]
+            if client_id not in self.request_history:
+                self.request_history[client_id] = {}
+            self.request_history[client_id]["address"] = client_address
 
         if message.startswith("acquire_lock"):
             client_id = message.split(":")[1]
@@ -274,6 +340,10 @@ class LockManagerServer:
                     response = "Leader unknown"
         elif message == "ping":
             response = "pong"
+        elif message.startswith("release_lock"):
+            client_id = message.split(":")[1]
+            response = self.release_lock(client_id)
+            self.sock.sendto(response.encode(), client_address)
         else:
             response = "Unknown command"
 
