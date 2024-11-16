@@ -44,6 +44,11 @@ class LockManagerServer:
         self.request_history = defaultdict(dict)
 
         self.queue_clients = []
+        self.lock_acquired = False
+
+        self.modif_request = {}  # Dictionary to store client modifications
+        self.clients_active = []  # List of active clients
+
 
         # Load state for fault tolerance
         self.load_state()
@@ -77,16 +82,14 @@ class LockManagerServer:
                 elif parts[0] == "lock_state":
                     lock_data = parts[1]
                     self.sync_lock_state(lock_data)
-                    #TODO: respond - aknowledge updates
                     if self.sync_lock_state(lock_data) == True:
                         self.sock.sendto(message.encode(), self.leader_address)
 
                 elif parts[0] == "file_update":
                     file_name, file_data = parts[1], parts[2]
                     self.sync_file(file_name, file_data)
-                    #TODO: respond - aknowledge updates
-                    if self.sync_file(lock_data) == True:
-                        self.sock.sendto(message.encode(), self.leader_address)
+                    #if self.sync_file(file_name, file_data) == False:
+                        #self.sock.sendto(message.encode(), self.leader_address)
                 
                 elif message == "identify_leader":
                     if self.role == 'leader':
@@ -120,16 +123,20 @@ class LockManagerServer:
             print(f"[DEBUG] Synchronized lock state from leader")
             return True
 
-    def sync_file(self, file_name, file_data):
+    def sync_file(self, file_name, file_data): #Not working as expected
         # Synchronize file append from leader
-        print(f"[DEBUG] Follower syncing file {file_name} with data: {file_data}")
-        file_path = os.path.join(FILES_DIR, file_name)
-        with open(file_path, 'a') as f:
-            f.write(file_data + "\n")
-            f.flush()
-            os.fsync(f.fileno())
-        print(f"[DEBUG] Synchronized file {file_name} with data: {file_data} on follower")
-        return True
+        try:
+            print(f"[DEBUG] Follower syncing file {file_name} with data: {file_data}")
+            file_path = os.path.join(FILES_DIR, file_name)
+            with open(file_path, 'a') as f:
+                f.write(file_data + "\n")
+                f.flush()
+                os.fsync(f.fileno())
+            print(f"[DEBUG] Synchronized file {file_name} with data: {file_data} on follower")
+            return True
+        except Exception as e:
+            print(f"[ERROR] Failed to sync file {file_name}: {str(e)}")
+            return False
     #----------Replica logic---------------
 
     def queue(self, client_id):
@@ -157,6 +164,7 @@ class LockManagerServer:
                     # Grant the lock to the requesting client
                     self.current_lock_holder = client_id
                     self.lock_expiration_time = current_time + LOCK_LEASE_DURATION
+                    self.lock_acquired = True
                     self.notify_followers_lock_state()
                     self.save_state()
                     return f"grant lock:{LOCK_LEASE_DURATION}"
@@ -169,23 +177,29 @@ class LockManagerServer:
         else:
             return f"Redirect to leader at {self.leader_address}"
 
-    def release_lock(self):
-        if self.lock_acquired:
-            for attempt in range(3):  # Retry release lock up to 3 times
-                response = self.send_message("release_lock")
-                if response == "unlock success":
+    def release_lock(self, client_id):
+        if self.role == 'leader':
+            with self.lock:
+                if self.current_lock_holder == client_id:
+                    # Release the lock
+                    self.current_lock_holder = None
+                    self.lock_expiration_time = None
                     self.lock_acquired = False
-                    print(f"{self.client_id}: Lock released successfully.")
-                    return
-                elif response == "You do not hold the lock":
-                    print(f"{self.client_id}: Lock release failed - client does not hold the lock.")
-                    return
+                    
+                    # Notify followers of the updated lock state
+                    self.notify_followers_lock_state()
+                    
+                    # Persist state
+                    self.save_state()
+                    
+                    print(f"[DEBUG] Lock released successfully by {client_id}.")
+                    return "unlock success"
                 else:
-                    print(f"{self.client_id}: Failed to release lock, retrying... (Attempt {attempt + 1}/3)")
-                    time.sleep(1)  # Short delay before retry
-            print(f"{self.client_id}: Failed to release lock after retries.")
+                    print(f"[DEBUG] Release lock failed: {client_id} does not hold the lock.")
+                    return "You do not hold the lock"
         else:
-            print(f"{self.client_id}: Cannot release lock - lock not held by this client.")
+            # Redirect to the leader if this server is not the leader
+            return f"Redirect to leader at {self.leader_address}"
 
     
     def get_queue_status(self, client_id):
@@ -264,7 +278,21 @@ class LockManagerServer:
             response = self.release_lock(client_id)
         elif message.startswith("append_file"):
             client_id, request_id, file_name, file_data = message.split(":")[1:5]
-            response = self.append_to_file(client_id, file_name, file_data)
+            if client_id in self.clients_active:
+                # Check if client_id exists in modif_request and if request_id is in its values
+                if client_id in self.modif_request and request_id in self.modif_request[client_id]:
+                    response = "Repeated command"
+                else:
+                    response = self.append_to_file(client_id, file_name, file_data)
+                    # If client_id doesn't exist in modif_request, create a new set
+                    if client_id not in self.modif_request:
+                        self.modif_request[client_id] = set()
+                    # Add request_id to the set for this client
+                    self.modif_request[client_id].add(request_id)
+            else:
+                response = self.append_to_file(client_id, file_name, file_data)
+                # Initialize a new set for this client and add request_id
+                self.modif_request[client_id] = {request_id}
         elif message.startswith("identify_leader"):
             if self.role == 'leader':
                 response = "I am the leader"
