@@ -122,20 +122,19 @@ class LockManagerServer:
             print(f"[DEBUG] Synchronized lock state from leader")
             return True
 
-    def sync_file(self, file_name, file_data): 
-        # Synchronize file append from leader
-        try:
-            print(f"[DEBUG] Follower syncing file {file_name} with data: {file_data}")
-            file_path = os.path.join(FILES_DIR, file_name)
-            with open(file_path, 'a') as f:
-                f.write(file_data + "\n")
-                f.flush()
-                os.fsync(f.fileno())
-            print(f"[DEBUG] Synchronized file {file_name} with data: {file_data} on follower")
-            return True
-        except Exception as e:
-            print(f"[ERROR] Failed to sync file {file_name}: {str(e)}")
-            return False #Not working as expected
+    def sync_file(self, follower_ip, file_name, data):
+        retries = 3
+        for attempt in range(retries):
+            try:
+                self.send_file_update(follower_ip, file_name, data)
+                return  # Success
+            except Exception as e:
+                if attempt == retries - 1:
+                    print(f"Failed to sync file {file_name} with {follower_ip} after {retries} attempts")
+                else:
+                    print(f"Retrying file sync with {follower_ip} (Attempt {attempt + 1})")
+                    time.sleep(1)  # Wait a little before retrying
+
     #----------Replica logic---------------
 
     def queue(self, client_id):
