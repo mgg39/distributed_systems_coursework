@@ -18,7 +18,7 @@ for i in range(NUM_FILES):
     open(os.path.join(FILES_DIR, f"file_{i}"), 'a').close()
 
 class LockManagerServer:
-    def __init__(self, host='localhost', port=8080, server_id=1, peers=[("localhost", 8083), ("localhost", 8085)]):
+    def __init__(self, host='localhost', port=8080, server_id=1, peers= []): #[("localhost", 8083), ("localhost", 8085)]):
         self.server_address = (host, port)
         self.server_id = server_id
         self.peers = peers
@@ -43,6 +43,7 @@ class LockManagerServer:
         self.request_history = defaultdict(dict)
 
         self.queue_clients = []
+        self.lock_acquired = False
 
         # Load state for fault tolerance
         self.load_state()
@@ -156,6 +157,7 @@ class LockManagerServer:
                     # Grant the lock to the requesting client
                     self.current_lock_holder = client_id
                     self.lock_expiration_time = current_time + LOCK_LEASE_DURATION
+                    self.lock_acquired = True
                     self.notify_followers_lock_state()
                     self.save_state()
                     return f"grant lock:{LOCK_LEASE_DURATION}"
@@ -168,23 +170,29 @@ class LockManagerServer:
         else:
             return f"Redirect to leader at {self.leader_address}"
 
-    def release_lock(self):
-        if self.lock_acquired:
-            for attempt in range(3):  # Retry release lock up to 3 times
-                response = self.send_message("release_lock")
-                if response == "unlock success":
+    def release_lock(self, client_id):
+        if self.role == 'leader':
+            with self.lock:
+                if self.current_lock_holder == client_id:
+                    # Release the lock
+                    self.current_lock_holder = None
+                    self.lock_expiration_time = None
                     self.lock_acquired = False
-                    print(f"{self.client_id}: Lock released successfully.")
-                    return
-                elif response == "You do not hold the lock":
-                    print(f"{self.client_id}: Lock release failed - client does not hold the lock.")
-                    return
+                    
+                    # Notify followers of the updated lock state
+                    self.notify_followers_lock_state()
+                    
+                    # Persist state
+                    self.save_state()
+                    
+                    print(f"[DEBUG] Lock released successfully by {client_id}.")
+                    return "unlock success"
                 else:
-                    print(f"{self.client_id}: Failed to release lock, retrying... (Attempt {attempt + 1}/3)")
-                    time.sleep(1)  # Short delay before retry
-            print(f"{self.client_id}: Failed to release lock after retries.")
+                    print(f"[DEBUG] Release lock failed: {client_id} does not hold the lock.")
+                    return "You do not hold the lock"
         else:
-            print(f"{self.client_id}: Cannot release lock - lock not held by this client.")
+            # Redirect to the leader if this server is not the leader
+            return f"Redirect to leader at {self.leader_address}"
 
     
     def get_queue_status(self, client_id):

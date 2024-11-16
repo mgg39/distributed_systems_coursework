@@ -18,7 +18,7 @@ for i in range(NUM_FILES):
     open(os.path.join(FILES_DIR, f"file_{i}"), 'a').close()
 
 class LockManagerServer:
-    def __init__(self, host='localhost', port=8080, server_id=1, peers=[("localhost", 8083), ("localhost", 8085)]):
+    def __init__(self, host='localhost', port=8080, server_id=1, peers= []): #[("localhost", 8083), ("localhost", 8085)]):
         self.server_address = (host, port)
         self.server_id = server_id
         self.peers = peers
@@ -43,6 +43,7 @@ class LockManagerServer:
         self.request_history = defaultdict(dict)
 
         self.queue_clients = []
+        self.lock_acquired = False
 
         # Load state for fault tolerance
         self.load_state()
@@ -156,6 +157,7 @@ class LockManagerServer:
                     # Grant the lock to the requesting client
                     self.current_lock_holder = client_id
                     self.lock_expiration_time = current_time + LOCK_LEASE_DURATION
+                    self.lock_acquired = True
                     self.notify_followers_lock_state()
                     self.save_state()
                     return f"grant lock:{LOCK_LEASE_DURATION}"
@@ -168,23 +170,29 @@ class LockManagerServer:
         else:
             return f"Redirect to leader at {self.leader_address}"
 
-    def release_lock(self):
-        if self.lock_acquired:
-            for attempt in range(3):  # Retry release lock up to 3 times
-                response = self.send_message("release_lock")
-                if response == "unlock success":
+    def release_lock(self, client_id):
+        if self.role == 'leader':
+            with self.lock:
+                if self.current_lock_holder == client_id:
+                    # Release the lock
+                    self.current_lock_holder = None
+                    self.lock_expiration_time = None
                     self.lock_acquired = False
-                    print(f"{self.client_id}: Lock released successfully.")
-                    return
-                elif response == "You do not hold the lock":
-                    print(f"{self.client_id}: Lock release failed - client does not hold the lock.")
-                    return
+                    
+                    # Notify followers of the updated lock state
+                    self.notify_followers_lock_state()
+                    
+                    # Persist state
+                    self.save_state()
+                    
+                    print(f"[DEBUG] Lock released successfully by {client_id}.")
+                    return "unlock success"
                 else:
-                    print(f"{self.client_id}: Failed to release lock, retrying... (Attempt {attempt + 1}/3)")
-                    time.sleep(1)  # Short delay before retry
-            print(f"{self.client_id}: Failed to release lock after retries.")
+                    print(f"[DEBUG] Release lock failed: {client_id} does not hold the lock.")
+                    return "You do not hold the lock"
         else:
-            print(f"{self.client_id}: Cannot release lock - lock not held by this client.")
+            # Redirect to the leader if this server is not the leader
+            return f"Redirect to leader at {self.leader_address}"
 
     
     def get_queue_status(self, client_id):
@@ -224,56 +232,11 @@ class LockManagerServer:
 
     def notify_followers_file_update(self, file_name, file_data):
         print(f"[DEBUG] Leader sending file update for {file_name} with data: {file_data}")
-        success_count = 0  # Count of successful acknowledgments
-
         for peer in self.peers:
             message = f"file_update:{file_name}:{file_data}"
-            attempts = 0  # Number of attempts for this peer
-            while attempts < 3:  # Try up to 3 times
-                try:
-                    self.sock.sendto(message.encode(), peer)
-                    print(f"[DEBUG] Sent file update to {peer}. Waiting for acknowledgment...")
-                    self.sock.settimeout(1)  # Wait for up to 1 second for acknowledgment
-                    response, addr = self.sock.recvfrom(1024)  # Blocking until timeout
-                    if response.decode() == f"ack_file_update:{file_name}":
-                        print(f"[DEBUG] Acknowledgment received from {peer} for file {file_name}")
-                        success_count += 1
-                        break  # Exit retry loop for this peer
-                except socket.timeout:
-                    print(f"[WARNING] No acknowledgment from {peer}. Retrying ({attempts + 1}/3)...")
-                attempts += 1
+            self.sock.sendto(message.encode(), peer)
 
-            if attempts == 3:
-                print(f"[ERROR] Failed to receive acknowledgment from {peer} after 3 attempts.")
-                return f"Error: File update failed for {file_name}. Peer {peer} did not respond."
-
-        # If all peers acknowledged successfully
-        if success_count == len(self.peers):
-            print(f"[DEBUG] File update {file_name} successfully acknowledged by all peers.")
-            return "File update successful"
-        else:
-            return f"Error: Partial success for file update {file_name}. Some peers failed to respond."
-
-
-    def peer_respond_file_update(self, file_name, file_data):
-        print(f"[DEBUG] Received file update for {file_name} with data: {file_data} from leader")
-        try:
-            # Perform the file synchronization
-            file_path = os.path.join(FILES_DIR, file_name)
-            with open(file_path, 'a') as f:
-                f.write(file_data + "\n")
-                f.flush()
-                os.fsync(f.fileno())
-            print(f"[DEBUG] File {file_name} updated successfully with data: {file_data}")
-
-            # Send acknowledgment back to leader
-            acknowledgment = f"ack_file_update:{file_name}"
-            self.sock.sendto(acknowledgment.encode(), self.leader_address)
-            print(f"[DEBUG] Sent acknowledgment for file {file_name} to leader")
-        except Exception as e:
-            print(f"[ERROR] Failed to update file {file_name}: {e}")
-
-    def notify_followers_lock_state(self): #TODO
+    def notify_followers_lock_state(self):
         lock_data = json.dumps({
             "current_lock_holder": self.current_lock_holder,
             "lock_expiration_time": self.lock_expiration_time

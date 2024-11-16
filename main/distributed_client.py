@@ -5,7 +5,7 @@ from rpc_connection import RPCConnection
 import urllib.parse
 
 class DistributedClient:
-    def __init__(self, client_id, servers):
+    def __init__(self, client_id, replicas):
         self.client_id = client_id
         self.servers = servers  # List of known server addresses (host, port)
         self.current_leader = None
@@ -113,14 +113,21 @@ class DistributedClient:
     def release_lock(self):
         if self.lock_acquired:
             for attempt in range(3):  # Retry release lock up to 3 times
-                response = self.send_message("release_lock")
+                response = self.send_message(f"release_lock:{self.client_id}")
+                
                 if response == "unlock success":
                     self.lock_acquired = False
                     print(f"{self.client_id}: Lock released successfully.")
                     return
+                
+                elif response == "You do not hold the lock":
+                    print(f"{self.client_id}: Lock release failed - client does not hold the lock.")
+                    return
+                
                 else:
                     print(f"{self.client_id}: Failed to release lock, retrying... (Attempt {attempt + 1}/3)")
                     time.sleep(1)  # Short delay before retry
+            
             print(f"{self.client_id}: Failed to release lock after retries.")
         else:
             print(f"{self.client_id}: Cannot release lock - lock not held by this client.")
@@ -137,21 +144,29 @@ class DistributedClient:
     def send_message(self, message_type, additional_info=""):
         if not self.current_leader and not self.find_leader():
             return "Leader not found"
-        
+
         # Handle append_file specifically without URL encoding
         if message_type == "append_file":
             message = f"{message_type}:{self.client_id}:{self.next_request_id()}:{additional_info}"
         else:
             message = f"{message_type}:{self.client_id}:{self.next_request_id()}:{urllib.parse.quote(additional_info)}"
         
-        response = self.connection.rpc_send(message)
-        
-        if response.startswith("Redirect to leader"):
+        try:
+            response = self.connection.rpc_send(message)
+            if response.startswith("Redirect to leader"):
+                if not self.find_leader():
+                    return "Leader redirect failed"
+                return self.send_message(message_type, additional_info)  # Retry with updated leader
+            return response
+
+        except socket.error as e:
+            print(f"Socket error during send: {e}")
+            # Attempt to reconnect or handle socket closure
+            self.close()
             if not self.find_leader():
-                return "Leader redirect failed"
-            return self.send_message(message_type, additional_info)  # Retry with updated leader
-        
-        return response
+                return "Leader search failed"
+            return self.send_message(message_type, additional_info)  # Retry the message sending
+
 
     def append_file(self, file_name, data):
         if self.lock_acquired:
@@ -176,15 +191,14 @@ class DistributedClient:
             self.connection.close()
         print(f"{self.client_id}: Connection closed.")
 
-
 if __name__ == "__main__":
     # List of known server addresses
-    servers = [('localhost', 8080), ('localhost', 8082), ('localhost', 8084)]
+    servers = [('localhost', 8080)]#, ('localhost', 8082), ('localhost', 8084)]
 
     # Create two clients
     client1 = DistributedClient("client_1", servers)
     client2 = DistributedClient("client_2", servers)
-    client3 = DistributedClient("client_2", servers)
+    client3 = DistributedClient("client_3", servers)
 
     def client_task(client, file_name, data):
         try:
@@ -215,17 +229,16 @@ if __name__ == "__main__":
     # Create threads for each client to simulate simultaneous operations
     thread1 = threading.Thread(target=client_task, args=(client1, "file_1", "1"))
     thread2 = threading.Thread(target=client_task, args=(client2, "file_1", "2"))
-    thread3 = threading.Thread(target=client_task, args=(client2, "file_1", "3"))
+    thread3 = threading.Thread(target=client_task, args=(client3, "file_1", "3"))
 
     # Start the threads
     thread1.start()
     thread2.start()
     thread3.start()
 
-    # Wait for both threads to finish
+    # Wait for threads to finish
     thread1.join()
     thread2.join()
     thread3.join()
 
     print("All clients have completed their operations.")
-

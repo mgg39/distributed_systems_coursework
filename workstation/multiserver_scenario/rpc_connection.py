@@ -35,6 +35,8 @@ class RPCConnection:
                 backoff_time *= 2
 
     def close(self):
-        if self.sock:
+        try:
             self.sock.close()
-            print("Socket closed")
+            print("RPCConnection: Socket closed.")
+        except socket.error as e:
+            print(f"RPCConnection: Failed to close socket: {e}")
