@@ -6,86 +6,77 @@ mgg39@Maria-GG-PC ~/D/d/w/multiserver_scenario copy (working-without-queue)> pyt
 client_1: Error in message listener: 'NoneType' object has no attribute 'sock'
 client_2: Error in message listener: 'NoneType' object has no attribute 'sock'
 client_1: Attempting to acquire lock...
-[DEBUG] Sending message: acquire_lock with info: 
-client_1 - Attempting to find leader, attempt 1/5
-[DEBUG] Initializing connection to ('localhost', 8080)
-[DEBUG] Connecting to ('localhost', 8080)
-[DEBUG] Attempt 1: Sending 'identify_leader:client_1' to ('localhost', 8080)
 client_2: Attempting to acquire lock...
 [DEBUG] Sending message: acquire_lock with info: 
+[DEBUG] Sending message: acquire_lock with info: 
+client_1 - Attempting to find leader, attempt 1/5
 client_2 - Attempting to find leader, attempt 1/5
-[DEBUG] Initializing connection to ('localhost', 8080)
-[DEBUG] Connecting to ('localhost', 8080)
-[DEBUG] Attempt 1: Sending 'identify_leader:client_2' to ('localhost', 8080)
-[DEBUG] Received response: I am the leader
+Attempt 1: Sending 'identify_leader:client_1' to ('localhost', 8080)
+Attempt 1: Sending 'identify_leader:client_2' to ('localhost', 8080)
 client_1 - Received response: I am the leader
 client_1 - Leader found: ('localhost', 8080)
-[DEBUG] Received response: I am the leader
 client_2 - Received response: I am the leader
 client_2 - Leader found: ('localhost', 8080)
-[DEBUG] Attempt 1: Sending 'acquire_lock:client_1:1:' to ('localhost', 8080)
-[DEBUG] Attempt 1: Sending 'acquire_lock:client_2:1:' to ('localhost', 8080)
-[DEBUG] Received response: grant lock:20
+Attempt 1: Sending 'acquire_lock:client_2:1:' to ('localhost', 8080)
+Attempt 1: Sending 'acquire_lock:client_1:1:' to ('localhost', 8080)
 [DEBUG] Response received for acquire_lock: grant lock:20
-[DEBUG] Received response: queued:position_1
 [DEBUG] Response received for acquire_lock: queued:position_1
 client_1: Added to queue at position 1. Retrying after 1 seconds...
 client_2: Lock acquired with lease duration 20 seconds.
 client_2: Lock acquired. Attempting to append data to file.
 [DEBUG] Sending message: append_file with info: file_1:2
-[DEBUG] Attempt 1: Sending 'append_file:client_2:2:file_1:2' to ('localhost', 8080)
-[DEBUG] Received response: append success
+Attempt 1: Sending 'append_file:client_2:2:file_1:2' to ('localhost', 8080)
 [DEBUG] Response received for append_file: append success
 client_2: Data appended to file_1
 client_2: Data appended successfully.
 client_2: Releasing lock if held and closing connection.
 client_2: Attempting to release lock (attempt 1)
 [DEBUG] Sending message: release_lock with info: 
-[DEBUG] Attempt 1: Sending 'release_lock:client_2:3:' to ('localhost', 8080)
+Attempt 1: Sending 'release_lock:client_2:3:' to ('localhost', 8080)
 [DEBUG] Sending message: acquire_lock with info: 
-[DEBUG] Attempt 1: Sending 'acquire_lock:client_1:2:' to ('localhost', 8080)
-[DEBUG] Attempt 1: Timeout, retrying...
-[DEBUG] Attempt 2: Sending 'release_lock:client_2:3:' to ('localhost', 8080)
-[DEBUG] Attempt 1: Timeout, retrying...
-[DEBUG] Attempt 2: Sending 'acquire_lock:client_1:2:' to ('localhost', 8080)
-[DEBUG] Attempt 2: Timeout, retrying...
-[DEBUG] Attempt 3: Sending 'release_lock:client_2:3:' to ('localhost', 8080)
-[DEBUG] Attempt 2: Timeout, retrying...
-[DEBUG] Attempt 3: Sending 'acquire_lock:client_1:2:' to ('localhost', 8080)
-[DEBUG] Attempt 3: Timeout, retrying...
-[DEBUG] Response received for release_lock: Error after retries: No response or invalid socket
-client_2: Unexpected release response: Error after retries: No response or invalid socket
-[DEBUG] Attempt 3: Timeout, retrying...
-[DEBUG] Response received for acquire_lock: Error after retries: No response or invalid socket
-client_1: Unexpected response - Error after retries: No response or invalid socket
+Attempt 1: Sending 'acquire_lock:client_1:2:' to ('localhost', 8080)
+Attempt 1: Timeout, retrying...
+Attempt 1: Timeout, retrying...
+Attempt 2: Sending 'release_lock:client_2:3:' to ('localhost', 8080)
+Attempt 2: Sending 'acquire_lock:client_1:2:' to ('localhost', 8080)
+Attempt 2: Timeout, retrying...
+Attempt 2: Timeout, retrying...
+Attempt 3: Sending 'release_lock:client_2:3:' to ('localhost', 8080)
+Attempt 3: Sending 'acquire_lock:client_1:2:' to ('localhost', 8080)
+Attempt 3: Timeout, retrying...
+[DEBUG] Response received for release_lock: Timeout: No response after retries
+client_2: Unexpected release response: Timeout: No response after retries
+Attempt 3: Timeout, retrying...
+[DEBUG] Response received for acquire_lock: Timeout: No response after retries
+client_1: Unexpected response - Timeout: No response after retries
 client_1: Failed to acquire lock after waiting.
 client_1: Releasing lock if held and closing connection.
 client_1: Cannot release lock - lock not held
-[DEBUG] Socket closed successfully.
+Socket closed
 client_1: Connection closed.
 client_2: Attempting to release lock (attempt 2)
 [DEBUG] Sending message: release_lock with info: 
-[DEBUG] Attempt 1: Sending 'release_lock:client_2:4:' to ('localhost', 8080)
-[DEBUG] Attempt 1: Timeout, retrying...
-[DEBUG] Attempt 2: Sending 'release_lock:client_2:4:' to ('localhost', 8080)
-[DEBUG] Attempt 2: Timeout, retrying...
-[DEBUG] Attempt 3: Sending 'release_lock:client_2:4:' to ('localhost', 8080)
-[DEBUG] Attempt 3: Timeout, retrying...
-[DEBUG] Response received for release_lock: Error after retries: No response or invalid socket
-client_2: Unexpected release response: Error after retries: No response or invalid socket
+Attempt 1: Sending 'release_lock:client_2:4:' to ('localhost', 8080)
+Attempt 1: Timeout, retrying...
+Attempt 2: Sending 'release_lock:client_2:4:' to ('localhost', 8080)
+Attempt 2: Timeout, retrying...
+Attempt 3: Sending 'release_lock:client_2:4:' to ('localhost', 8080)
+Attempt 3: Timeout, retrying...
+[DEBUG] Response received for release_lock: Timeout: No response after retries
+client_2: Unexpected release response: Timeout: No response after retries
 client_2: Attempting to release lock (attempt 3)
 [DEBUG] Sending message: release_lock with info: 
-[DEBUG] Attempt 1: Sending 'release_lock:client_2:5:' to ('localhost', 8080)
-[DEBUG] Attempt 1: Timeout, retrying...
-[DEBUG] Attempt 2: Sending 'release_lock:client_2:5:' to ('localhost', 8080)
+Attempt 1: Sending 'release_lock:client_2:5:' to ('localhost', 8080)
 client_2: Lock lease expired
-[DEBUG] Attempt 2: Timeout, retrying...
-[DEBUG] Attempt 3: Sending 'release_lock:client_2:5:' to ('localhost', 8080)
-[DEBUG] Attempt 3: Timeout, retrying...
-[DEBUG] Response received for release_lock: Error after retries: No response or invalid socket
-client_2: Unexpected release response: Error after retries: No response or invalid socket
+Attempt 1: Timeout, retrying...
+Attempt 2: Sending 'release_lock:client_2:5:' to ('localhost', 8080)
+Attempt 2: Timeout, retrying...
+Attempt 3: Sending 'release_lock:client_2:5:' to ('localhost', 8080)
+Attempt 3: Timeout, retrying...
+[DEBUG] Response received for release_lock: Timeout: No response after retries
+client_2: Unexpected release response: Timeout: No response after retries
 client_2: Failed to release lock after all retries
-[DEBUG] Socket closed successfully.
+Socket closed
 client_2: Connection closed.
 All clients have completed their operations.
 
@@ -100,61 +91,61 @@ mgg39@Maria-GG-PC ~/D/d/w/m/server_1 (working-without-queue)> python upd_server.
 [DEBUG] Queue after processing: []
 [DEBUG] Starting monitor_lock_expiration thread.
 Server 1 listening on ('localhost', 8080)
-[DEBUG] Received request: identify_leader:client_1 from ('127.0.0.1', 60236)
-[DEBUG] Sending response: I am the leader to ('127.0.0.1', 60236)
-[DEBUG] Received request: identify_leader:client_2 from ('127.0.0.1', 40017)
-[DEBUG] Sending response: I am the leader to ('127.0.0.1', 40017)
-[DEBUG] Received request: acquire_lock:client_1:1: from ('127.0.0.1', 60236)
-[DEBUG] Received request: acquire_lock:client_2:1: from ('127.0.0.1', 40017)
+[DEBUG] Received request: identify_leader:client_1 from ('127.0.0.1', 57755)
+[DEBUG] Sending response: I am the leader to ('127.0.0.1', 57755)
+[DEBUG] Received request: identify_leader:client_2 from ('127.0.0.1', 48079)
+[DEBUG] Sending response: I am the leader to ('127.0.0.1', 48079)
+[DEBUG] Received request: acquire_lock:client_2:1: from ('127.0.0.1', 48079)
 [DEBUG] Client client_2 entered acquire lock
-[DEBUG] Client client_1 entered acquire lock
 [DEBUG] Client client_2 entered acquire lock at leader
-[DEBUG] Client client_1 entered acquire lock at leader
 [DEBUG] Client client_2 entered acquire lock past self.lock
+[DEBUG] Received request: acquire_lock:client_1:1: from ('127.0.0.1', 57755)
+[DEBUG] Client client_1 entered acquire lock
+[DEBUG] Client client_1 entered acquire lock at leader
 [DEBUG] Lock granted to client_2
-[DEBUG] Sending response: grant lock:20 to ('127.0.0.1', 40017)
+[DEBUG] Sending response: grant lock:20 to ('127.0.0.1', 48079)
 [DEBUG] Client client_1 entered acquire lock past self.lock
 [DEBUG] Client client_1 added to queue at position 1
-[DEBUG] Sending response: queued:position_1 to ('127.0.0.1', 60236)
-[DEBUG] Received request: append_file:client_2:2:file_1:2 from ('127.0.0.1', 40017)
+[DEBUG] Sending response: queued:position_1 to ('127.0.0.1', 57755)
+[DEBUG] Received request: append_file:client_2:2:file_1:2 from ('127.0.0.1', 48079)
 [DEBUG] Leader sending file update for file_1 with data: 2
-[DEBUG] Sending response: append success to ('127.0.0.1', 40017)
-[DEBUG] Received request: release_lock:client_2:3: from ('127.0.0.1', 40017)
+[DEBUG] Sending response: append success to ('127.0.0.1', 48079)
+[DEBUG] Received request: release_lock:client_2:3: from ('127.0.0.1', 48079)
 [DEBUG] release_lock called by client_2. Current holder: client_2
 [DEBUG] Release lock called by client_2. Current holder: client_2
 [DEBUG] Releasing lock for client_2
 [DEBUG] Starting process_queue. Current queue: ['client_1'], Current holder: None
 [DEBUG] Queue is non-empty and lock is available. Processing next client.
-[DEBUG] Received request: acquire_lock:client_1:2: from ('127.0.0.1', 60236)
+[DEBUG] Received request: acquire_lock:client_1:2: from ('127.0.0.1', 57755)
 [DEBUG] Client client_1 entered acquire lock
 [DEBUG] Client client_1 entered acquire lock at leader
-[DEBUG] Received request: release_lock:client_2:3: from ('127.0.0.1', 40017)
+[DEBUG] Received request: release_lock:client_2:3: from ('127.0.0.1', 48079)
 [DEBUG] release_lock called by client_2. Current holder: None
 [DEBUG] Release lock called by client_2. Current holder: None
-[DEBUG] Received request: acquire_lock:client_1:2: from ('127.0.0.1', 60236)
+[DEBUG] Received request: acquire_lock:client_1:2: from ('127.0.0.1', 57755)
 [DEBUG] Client client_1 entered acquire lock
 [DEBUG] Client client_1 entered acquire lock at leader
-[DEBUG] Received request: release_lock:client_2:3: from ('127.0.0.1', 40017)
+[DEBUG] Received request: release_lock:client_2:3: from ('127.0.0.1', 48079)
 [DEBUG] release_lock called by client_2. Current holder: None
 [DEBUG] Release lock called by client_2. Current holder: None
-[DEBUG] Received request: acquire_lock:client_1:2: from ('127.0.0.1', 60236)
+[DEBUG] Received request: acquire_lock:client_1:2: from ('127.0.0.1', 57755)
 [DEBUG] Client client_1 entered acquire lock
 [DEBUG] Client client_1 entered acquire lock at leader
-[DEBUG] Received request: release_lock:client_2:4: from ('127.0.0.1', 40017)
+[DEBUG] Received request: release_lock:client_2:4: from ('127.0.0.1', 48079)
 [DEBUG] release_lock called by client_2. Current holder: None
 [DEBUG] Release lock called by client_2. Current holder: None
-[DEBUG] Received request: release_lock:client_2:4: from ('127.0.0.1', 40017)
+[DEBUG] Received request: release_lock:client_2:4: from ('127.0.0.1', 48079)
 [DEBUG] release_lock called by client_2. Current holder: None
 [DEBUG] Release lock called by client_2. Current holder: None
-[DEBUG] Received request: release_lock:client_2:4: from ('127.0.0.1', 40017)
+[DEBUG] Received request: release_lock:client_2:4: from ('127.0.0.1', 48079)
 [DEBUG] release_lock called by client_2. Current holder: None
 [DEBUG] Release lock called by client_2. Current holder: None
-[DEBUG] Received request: release_lock:client_2:5: from ('127.0.0.1', 40017)
+[DEBUG] Received request: release_lock:client_2:5: from ('127.0.0.1', 48079)
 [DEBUG] release_lock called by client_2. Current holder: None
 [DEBUG] Release lock called by client_2. Current holder: None
-[DEBUG] Received request: release_lock:client_2:5: from ('127.0.0.1', 40017)
+[DEBUG] Received request: release_lock:client_2:5: from ('127.0.0.1', 48079)
 [DEBUG] release_lock called by client_2. Current holder: None
 [DEBUG] Release lock called by client_2. Current holder: None
-[DEBUG] Received request: release_lock:client_2:5: from ('127.0.0.1', 40017)
+[DEBUG] Received request: release_lock:client_2:5: from ('127.0.0.1', 48079)
 [DEBUG] release_lock called by client_2. Current holder: None
 [DEBUG] Release lock called by client_2. Current holder: None

@@ -18,7 +18,7 @@ for i in range(NUM_FILES):
     open(os.path.join(FILES_DIR, f"file_{i}"), 'a').close()
 
 class LockManagerServer:
-    def __init__(self, host='localhost', port=8080, server_id=1, peers = []): #peers=[("localhost", 8083), ("localhost", 8085)]):
+    def __init__(self, host='localhost', port=8080, server_id=1, peers =[]): #peers=[("localhost", 8083), ("localhost", 8085)]):
         self.queue_clients = []  # Ensure queue_clients is always initialized
         self.server_address = (host, port)
         self.server_id = server_id
@@ -148,24 +148,6 @@ class LockManagerServer:
         self.process_queue()
     
     def notify_client_lock_granted(self, client_id):
-        print(f"[DEBUG] Notifying client {client_id} with grant lock message.")
-        try:
-            client_address = self.client_addresses.get(client_id)
-            if not client_address:
-                print(f"[ERROR] No address found for client {client_id}. Cannot send grant lock message.")
-                return
-            message = f"grant lock:{self.lock_lease_duration}"
-            print(f"[DEBUG] Prepared grant lock message for {client_id}: {message}")
-            if not self.sock:
-                print(f"[ERROR] Socket is not initialized when attempting to notify client {client_id}.")
-                return
-            self.sock.sendto(message.encode(), client_address)
-            print(f"[DEBUG] Successfully sent grant lock message to {client_id} at {client_address}")
-        except Exception as e:
-            print(f"[ERROR] Failed to notify client {client_id} with grant lock message: {e}")
-        if client_id not in self.queue_clients and self.current_lock_holder != client_id:
-            print(f"[ERROR] Cannot notify client {client_id} - not in queue or not the lock holder.")
-        print(f"[DEBUG] Notifying client {client_id} with grant lock message.")
         client_address = self.get_client_address(client_id)
         if client_address:
             message = f"grant lock:{LOCK_LEASE_DURATION}"
@@ -186,22 +168,14 @@ class LockManagerServer:
             if not self.current_lock_holder and self.queue_clients:
                 next_client = self.queue_clients.pop(0)
                 self.current_lock_holder = next_client
-                print(f"[DEBUG] current_lock_holder updated to {self.current_lock_holder}.")
-                print(f"[DEBUG] Updated current_lock_holder: {self.current_lock_holder}")
                 self.lock_expiration_time = time.time() + LOCK_LEASE_DURATION
                 print(f"[DEBUG] Lock assigned to {self.current_lock_holder}. Updated queue: {self.queue_clients}")
                 self.save_state()
                 self.notify_followers_lock_state()
-                print(f"[DEBUG] Attempting to notify client {next_client} about lock grant.")
                 self.notify_client_lock_granted(next_client)
-                print(f"[DEBUG] Grant lock notification sent to {next_client}.")
-                print(f"[DEBUG] Client {next_client} notified about lock grant.")
-                self.notify_client_lock_granted(next_client)
-                print(f"[DEBUG] Grant lock notification sent to {next_client}.")
                 print(f"[DEBUG] Lock granted to {next_client}. Notification sent.")
                 print(f"[DEBUG] Lock granted to {next_client}. Notifying the client.")
                 self.notify_client_lock_granted(next_client)
-                print(f"[DEBUG] Grant lock notification sent to {next_client}.")
             else:
                 if self.current_lock_holder:
                     print(f"[DEBUG] Queue processing skipped. Lock already held by {self.current_lock_holder}.")
@@ -212,18 +186,11 @@ class LockManagerServer:
             if not self.current_lock_holder and self.queue_clients:
                 next_client = self.queue_clients.pop(0)
                 self.current_lock_holder = next_client
-                print(f"[DEBUG] current_lock_holder updated to {self.current_lock_holder}.")
-                print(f"[DEBUG] Updated current_lock_holder: {self.current_lock_holder}")
                 self.lock_expiration_time = time.time() + LOCK_LEASE_DURATION
                 print(f"[DEBUG] Processed queue, current lock holder: {self.current_lock_holder}")
                 self.save_state()
                 self.notify_followers_lock_state()
-                print(f"[DEBUG] Attempting to notify client {next_client} about lock grant.")
                 self.notify_client_lock_granted(next_client)
-                print(f"[DEBUG] Grant lock notification sent to {next_client}.")
-                print(f"[DEBUG] Client {next_client} notified about lock grant.")
-                self.notify_client_lock_granted(next_client)
-                print(f"[DEBUG] Grant lock notification sent to {next_client}.")
                 print(f"[DEBUG] Lock granted to {next_client}. Notification sent.")
                 print(f"[DEBUG] Lock granted to {next_client}. Notifying the client.")
                 self.notify_client_lock_granted(next_client)
@@ -505,6 +472,16 @@ class LockManagerServer:
             self.current_lock_holder = state.get("current_lock_holder")
             self.lock_expiration_time = state.get("lock_expiration_time")
 
+    def shutdown(self):
+        self.running = False
+        self.socket.close()
+        print("[DEBUG] Server shutdown.")
+
 if __name__ == "__main__":
-    server = LockManagerServer()
-    server.start()
+    server = LockManagerServer(("localhost", 8080))
+    try:
+        server.start()
+        while True:
+            pass  # Keep server running
+    except KeyboardInterrupt:
+        server.shutdown()
