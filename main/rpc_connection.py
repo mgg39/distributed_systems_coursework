@@ -12,7 +12,7 @@ class RPCConnection:
 
     def rpc_send(self, message):
         attempt = 0
-        backoff_time = self.backoff
+        current_backoff = self.backoff  # Initialize backoff
         while attempt <= self.retries:
             try:
                 print(f"Attempt {attempt+1}: Sending '{message}' to {self.server_address}")
@@ -20,20 +20,19 @@ class RPCConnection:
                 data, _ = self.sock.recvfrom(1024)  # Increase recvfrom timeout here if needed
                 return data.decode()
             except socket.timeout:
-                print(f"Attempt {attempt+1}: Timeout, retrying...")
+                print(f"Attempt {attempt+1}: Timeout, retrying in {current_backoff} seconds...")
                 attempt += 1
                 if attempt > self.retries:
                     return "Timeout: No response after retries"
-                time.sleep(self.backoff)
-                backoff_time *= 2
+                time.sleep(current_backoff)
+                current_backoff *= 2  # Exponentially increase the backoff
             except Exception as e:
-                print(f"Attempt {attempt+1}: Error - {e}")
-                print(f"Message error: {message}")
+                print(f"Attempt {attempt+1}: Error - {e}, retrying in {current_backoff} seconds...")
                 attempt += 1
                 if attempt > self.retries:
                     return f"Error after retries: {e}"
-                time.sleep(self.backoff)
-                backoff_time *= 2
+                time.sleep(current_backoff)
+                current_backoff *= 2
 
     def close(self):
         if self.sock:

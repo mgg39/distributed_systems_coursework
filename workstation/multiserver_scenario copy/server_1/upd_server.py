@@ -18,7 +18,7 @@ for i in range(NUM_FILES):
     open(os.path.join(FILES_DIR, f"file_{i}"), 'a').close()
 
 class LockManagerServer:
-    def __init__(self, host='localhost', port=8080, server_id=1, peers =[]): #peers=[("localhost", 8083), ("localhost", 8085)]):
+    def __init__(self, host='localhost', port=8080, server_id=1, peers=[("localhost", 8083), ("localhost", 8085)]):
         self.queue_clients = []  # Ensure queue_clients is always initialized
         self.server_address = (host, port)
         self.server_id = server_id
@@ -472,16 +472,6 @@ class LockManagerServer:
             self.current_lock_holder = state.get("current_lock_holder")
             self.lock_expiration_time = state.get("lock_expiration_time")
 
-    def shutdown(self):
-        self.running = False
-        self.socket.close()
-        print("[DEBUG] Server shutdown.")
-
 if __name__ == "__main__":
-    server = LockManagerServer(("localhost", 8080))
-    try:
-        server.start()
-        while True:
-            pass  # Keep server running
-    except KeyboardInterrupt:
-        server.shutdown()
+    server = LockManagerServer()
+    server.start()
