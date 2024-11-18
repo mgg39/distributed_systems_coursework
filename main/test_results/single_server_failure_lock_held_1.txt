@@ -1,9 +1,9 @@
 Test ID: single_server_failure_lock_held_1
 Test: single_server_failure_lock_held
 Iteration: 1
-Start Time: 2024-11-18 10:23:29.190324
+Start Time: 2024-11-18 10:41:56.399584
 single_server_failure_lock_held_1 - Client 1 appended 'A' to file_1 with result: lock not held
 single_server_failure_lock_held_1 - Client 2 failed to acquire lock
 single_server_failure_lock_held_1 - Test result: FAIL
 Result: FAIL
-End Time: 2024-11-18 10:25:39.294086
+End Time: 2024-11-18 10:44:06.512633

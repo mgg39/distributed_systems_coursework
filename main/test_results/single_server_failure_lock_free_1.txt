@@ -1,0 +1,7 @@
+Test ID: single_server_failure_lock_free_1
+Test: single_server_failure_lock_free
+Iteration: 1
+Start Time: 2024-11-18 10:39:45.291735
+single_server_failure_lock_free_1 - Test result: FAIL
+Result: FAIL
+End Time: 2024-11-18 10:41:56.399255

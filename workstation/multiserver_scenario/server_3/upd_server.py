@@ -2,15 +2,14 @@ import socket
 import os
 import threading
 import time
-from collections import defaultdict
-import urllib.parse
-import json
 import random
+import json
+from collections import defaultdict
 
 FILES_DIR = "server_files"
 NUM_FILES = 100
 LOCK_LEASE_DURATION = 20  # Lease duration in seconds
-STATE_FILE = os.path.join(os.path.dirname(__file__), "server_state_3.json")
+STATE_FILE = os.path.join(os.path.dirname(__file__), "server_state_1.json")
 
 # Ensure the files directory exists and create 100 files
 if not os.path.exists(FILES_DIR):
@@ -19,7 +18,7 @@ for i in range(NUM_FILES):
     open(os.path.join(FILES_DIR, f"file_{i}"), 'a').close()
 
 class LockManagerServer:
-    def __init__(self, host='localhost', port=8084, server_id=3, peers=[("localhost", 8081), ("localhost", 8083)]):
+    def __init__(self, host='localhost', port=8084, server_id=3, peers= [("localhost", 8081), ("localhost", 8082)]):
         self.server_address = (host, port)
         self.server_id = server_id
         self.peers = peers
@@ -64,9 +63,19 @@ class LockManagerServer:
 
     def start(self):
         print(f"Server {self.server_id} listening on {self.server_address}")
+        
+        # Set a timeout for the main socket to avoid indefinite blocking
+        self.sock.settimeout(2)
+        
         while True:
-            data, client_address = self.sock.recvfrom(1024)  # Blocking mode for client requests
-            threading.Thread(target=self.handle_request, args=(data, client_address)).start()
+            try:
+                data, client_address = self.sock.recvfrom(1024)  # Blocking mode with timeout
+                threading.Thread(target=self.handle_request, args=(data, client_address)).start()
+            except socket.timeout:
+                # Handle the timeout case by continuing the loop
+                continue
+            except Exception as e:
+                print(f"[ERROR] Unexpected error in start method: {e}")
     
     def handle_messages(self):
         while True:
@@ -112,7 +121,7 @@ class LockManagerServer:
             self.leader_address = self.peers[leader_id - 1]
             self.last_heartbeat = time.time()
             print(f"[DEBUG] Server {self.server_id} following leader {leader_id}.")
-
+            
     #----------Replica logic---------------
     def sync_lock_state(self, lock_data):
         # Synchronize lock state from leader
@@ -341,7 +350,7 @@ class LockManagerServer:
             self.leader_address = self.server_address
             print(f"[DEBUG] Server {self.server_id} became the leader due to no active lower-ID servers")
             self.send_heartbeats()
-        
+
     def is_peer_alive(self, peer_address):
         try:
             # Send a "ping" message to the peer

@@ -342,9 +342,9 @@ def main():
         summary.write("====================\n")
         
         test_functions = [
-            #(network_failure_packet_delay, "network_failure_packet_delay"), #simulated: 100ms delay tc
-            #(network_failure_packet_drop_server_loss, "network_failure_packet_drop"), #simulated: 1% loss tc
-            #(client_failure_stall_before_edit, "client_failure_stall_before_edit"), 
+            (network_failure_packet_delay, "network_failure_packet_delay"), #simulated: 100ms delay tc
+            (network_failure_packet_drop_server_loss, "network_failure_packet_drop"), #simulated: 1% loss tc
+            (client_failure_stall_before_edit, "client_failure_stall_before_edit"), 
             (client_failure_stall_after_edit, "client_failure_stall_after_edit"), 
             (single_server_failure_lock_free, "single_server_failure_lock_free"), 
             (single_server_failure_lock_held, "single_server_failure_lock_held"), 

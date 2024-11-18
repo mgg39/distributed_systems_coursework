@@ -238,11 +238,11 @@ class LockManagerServer:
 
     def notify_followers_file_update(self, file_name, file_data):
         for peer in self.peers:
-            for _ in range(3):  # Retry up to 3 times
+            for attempt in range(3):  # Retry up to 3 times
                 try:
                     message = f"file_update:{file_name}:{file_data}"
                     self.sock.sendto(message.encode(), peer)
-                    ack, _ = self.sock.recvfrom(1024)  # Wait for acknowledgment
+                    ack, _ = self.sock.recvfrom(1024)
                     if ack.decode() == "ack":
                         break
                 except socket.timeout:
@@ -270,49 +270,23 @@ class LockManagerServer:
                     print(f"[DEBUG] Lock expired for client {self.current_lock_holder}. Releasing lock.")
                     self.current_lock_holder = None
                     self.lock_expiration_time = None
+                    self.lock_acquired = False
+                    self.notify_followers_lock_state()
                     self.save_state()
                     self.process_queue()  # Process the next client in the queue
             time.sleep(1)
+            while True:
+                with self.lock:
+                    if self.current_lock_holder and self.lock_expiration_time and time.time() > self.lock_expiration_time:
+                        print(f"[DEBUG] Lock expired for client {self.current_lock_holder}. Releasing lock.")
+                        self.current_lock_holder = None
+                        self.lock_expiration_time = None
+                        self.save_state()
+                        self.process_queue()  # Process the next client in the queue
+                time.sleep(1)
 
     
     def handle_request(self, data, client_address):
-        message = data.decode()
-        print(f"[DEBUG] Received request: {message} from {client_address}")
-
-        if message.startswith("acquire_lock"):
-            client_id = message.split(":")[1]
-            response = self.acquire_lock(client_id)
-        elif message.startswith("release_lock"):
-            client_id = message.split(":")[1]
-            response = self.release_lock(client_id)
-        elif message.startswith("append_file"):
-            try:
-                client_id, request_id, file_name, file_data = message.split(":")[1:5]
-                if client_id in self.clients_active:
-                    if client_id in self.modif_request and request_id in self.modif_request[client_id]:
-                        response = "Repeated command"
-                    else:
-                        response = self.append_to_file(client_id, file_name, file_data)
-                        if client_id not in self.modif_request:
-                            self.modif_request[client_id] = set()
-                        self.modif_request[client_id].add(request_id)
-                else:
-                    response = self.append_to_file(client_id, file_name, file_data)
-                    self.modif_request[client_id] = {request_id}
-            except Exception as e:
-                response = f"Error handling append_file: {str(e)}"
-        elif message.startswith("identify_leader"):
-            if self.role == 'leader':
-                response = "I am the leader"
-            else:
-                response = f"Redirect to leader:{self.leader_address[0]}:{self.leader_address[1]}" if self.leader_address else "Leader unknown"
-        elif message == "ping":
-            response = "pong"
-        else:
-            response = "Unknown command"
-
-        print(f"[DEBUG] Sending response: {response} to {client_address}")
-        self.sock.sendto(response.encode(), client_address)
         message = data.decode()
         print(f"[DEBUG] Received request: {message} from {client_address}")
 
@@ -363,6 +337,18 @@ class LockManagerServer:
             time.sleep(0.1)
     
     def start_election(self):
+        if self.role == 'leader':
+            return
+        for peer_id, peer_address in sorted([(i+1, p) for i, p in enumerate(self.peers)]):
+            if peer_id < self.server_id and self.is_peer_alive(peer_address):
+                self.role = 'follower'
+                self.leader_address = peer_address
+                print(f"[DEBUG] Server {self.server_id} defers to active lower-ID leader: Server {peer_id}")
+                return
+        self.role = 'leader'
+        self.leader_address = self.server_address
+        print(f"[DEBUG] Server {self.server_id} became the leader.")
+        self.send_heartbeats()
         if self.role == 'leader':
             return  # Do nothing if already a leader
 

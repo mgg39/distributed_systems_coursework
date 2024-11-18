@@ -1,5 +1,20 @@
 Test Summary
 ====================
+network_failure_packet_delay:
+  Total Runs: 1
+  Successes: 1
+  Failures: 0
+
+network_failure_packet_drop_server_loss:
+  Total Runs: 1
+  Successes: 1
+  Failures: 0
+
+client_failure_stall_before_edit:
+  Total Runs: 1
+  Successes: 1
+  Failures: 0
+
 client_failure_stall_after_edit:
   Total Runs: 1
   Successes: 0

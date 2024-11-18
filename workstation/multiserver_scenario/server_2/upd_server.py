@@ -9,7 +9,7 @@ from collections import defaultdict
 FILES_DIR = "server_files"
 NUM_FILES = 100
 LOCK_LEASE_DURATION = 20  # Lease duration in seconds
-STATE_FILE = os.path.join(os.path.dirname(__file__), "server_state_2.json")
+STATE_FILE = os.path.join(os.path.dirname(__file__), "server_state_1.json")
 
 # Ensure the files directory exists and create 100 files
 if not os.path.exists(FILES_DIR):
@@ -63,9 +63,19 @@ class LockManagerServer:
 
     def start(self):
         print(f"Server {self.server_id} listening on {self.server_address}")
+        
+        # Set a timeout for the main socket to avoid indefinite blocking
+        self.sock.settimeout(2)
+        
         while True:
-            data, client_address = self.sock.recvfrom(1024)  # Blocking mode for client requests
-            threading.Thread(target=self.handle_request, args=(data, client_address)).start()
+            try:
+                data, client_address = self.sock.recvfrom(1024)  # Blocking mode with timeout
+                threading.Thread(target=self.handle_request, args=(data, client_address)).start()
+            except socket.timeout:
+                # Handle the timeout case by continuing the loop
+                continue
+            except Exception as e:
+                print(f"[ERROR] Unexpected error in start method: {e}")
     
     def handle_messages(self):
         while True:
@@ -111,7 +121,7 @@ class LockManagerServer:
             self.leader_address = self.peers[leader_id - 1]
             self.last_heartbeat = time.time()
             print(f"[DEBUG] Server {self.server_id} following leader {leader_id}.")
-
+            
     #----------Replica logic---------------
     def sync_lock_state(self, lock_data):
         # Synchronize lock state from leader
@@ -340,7 +350,7 @@ class LockManagerServer:
             self.leader_address = self.server_address
             print(f"[DEBUG] Server {self.server_id} became the leader due to no active lower-ID servers")
             self.send_heartbeats()
-        
+
     def is_peer_alive(self, peer_address):
         try:
             # Send a "ping" message to the peer
