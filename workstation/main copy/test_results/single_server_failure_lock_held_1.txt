@@ -1,0 +1,9 @@
+Test ID: single_server_failure_lock_held_1
+Test: single_server_failure_lock_held
+Iteration: 1
+Start Time: 2024-11-18 10:14:22.561896
+single_server_failure_lock_held_1 - Client 1 appended 'A' to file_1 with result: queued:position_1
+single_server_failure_lock_held_1 - Client 2 appended 'B' to file_1 with result: queued:position_2
+single_server_failure_lock_held_1 - Test result: FAIL
+Result: FAIL
+End Time: 2024-11-18 10:14:28.573913
