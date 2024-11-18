@@ -1,10 +1,10 @@
 Test ID: network_failure_packet_drop_1
 Test: network_failure_packet_drop
 Iteration: 1
-Start Time: 2024-11-18 10:37:13.149472
+Start Time: 2024-11-18 11:11:40.820962
 network_failure_packet_drop_1 - Simulating server packet loss for client 1 lock acquisition
 network_failure_packet_drop_1 - Client 1 appended 'A' to file_1 with result: append success
 network_failure_packet_drop_1 - Client 2 appended 'B' to file_1 with result: append success
 network_failure_packet_drop_1 - Test result: PASS
 Result: PASS
-End Time: 2024-11-18 10:37:15.172239
+End Time: 2024-11-18 11:11:42.848394
