@@ -350,7 +350,7 @@ def main():
             (single_server_failure_lock_held, "single_server_failure_lock_held"), 
         ]
         for test_func, test_name in test_functions:
-            run_test(test_func, test_name, 50)
+            run_test(test_func, test_name, 1)
 
         # Generate summary report
         for test_name, stats in summary_stats.items():

@@ -1,0 +1,9 @@
+Test ID: client_failure_stall_before_edit_5
+Test: client_failure_stall_before_edit
+Iteration: 5
+Start Time: 2024-11-29 12:01:15.614162
+client_failure_stall_before_edit_5 - Client 1 stalled and released lock
+client_failure_stall_before_edit_5 - Client 2 failed to acquire lock
+client_failure_stall_before_edit_5 - Test result: FAIL
+Result: FAIL
+End Time: 2024-11-29 12:03:36.730363

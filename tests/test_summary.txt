@@ -1,0 +1,55 @@
+Test Summary
+====================
+network_failure_packet_delay:
+  Total Runs: 5
+  Successes: 5
+  Failures: 0
+
+network_failure_packet_drop_server_loss:
+  Total Runs: 5
+  Successes: 5
+  Failures: 0
+
+client_failure_stall_before_edit:
+  Total Runs: 5
+  Successes: 1
+  Failures: 4
+  Failed Test IDs:
+    - client_failure_stall_before_edit_2
+    - client_failure_stall_before_edit_3
+    - client_failure_stall_before_edit_4
+    - client_failure_stall_before_edit_5
+
+client_failure_stall_after_edit:
+  Total Runs: 5
+  Successes: 0
+  Failures: 5
+  Failed Test IDs:
+    - client_failure_stall_after_edit_1
+    - client_failure_stall_after_edit_2
+    - client_failure_stall_after_edit_3
+    - client_failure_stall_after_edit_4
+    - client_failure_stall_after_edit_5
+
+single_server_failure_lock_free:
+  Total Runs: 5
+  Successes: 0
+  Failures: 5
+  Failed Test IDs:
+    - single_server_failure_lock_free_1
+    - single_server_failure_lock_free_2
+    - single_server_failure_lock_free_3
+    - single_server_failure_lock_free_4
+    - single_server_failure_lock_free_5
+
+single_server_failure_lock_held:
+  Total Runs: 5
+  Successes: 0
+  Failures: 5
+  Failed Test IDs:
+    - single_server_failure_lock_held_1
+    - single_server_failure_lock_held_2
+    - single_server_failure_lock_held_3
+    - single_server_failure_lock_held_4
+    - single_server_failure_lock_held_5
+
